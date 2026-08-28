@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #05070b;
+  --foreground: #e8eef8;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+body {
+  background-image:
+    radial-gradient(1200px 600px at 10% -10%, rgba(200, 163, 90, 0.08), transparent 50%),
+    radial-gradient(900px 500px at 100% 0%, rgba(34, 211, 238, 0.06), transparent 45%),
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: auto, auto, 48px 48px, 48px 48px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1a2438 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #1a2438;
+  border-radius: 99px;
+}
+
+.glass {
+  background: rgba(10, 16, 28, 0.72);
+  backdrop-filter: blur(22px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+}
+
+.klinecharts-pro {
+  height: 100%;
+}
+
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.live-dot {
+  animation: pulse-live 1.6s ease-in-out infinite;
+}
+
+@keyframes draw-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.enter {
+  animation: draw-in 0.35s ease both;
+}
