@@ -52,8 +52,8 @@ export const useRecommendations = create<RecState>((set) => ({
         else if (tp1 && mid <= tp1) status = "HIT_TP1";
         else if (mid < entryPrice) status = "IN_PROFIT";
         const risk = Math.abs(entryPrice - stopLoss) || 1;
-        const pnlPips = ((buy ? mid - entryPrice : entryPrice - mid) / risk) * 100;
-        return { ...rec, status, pnlPips, pnlPercent: pnlPips };
+        const pnlR = (buy ? mid - entryPrice : entryPrice - mid) / risk;
+        return { ...rec, status, pnlPips: pnlR, pnlPercent: pnlR * 100 };
       }),
     })),
 }));
