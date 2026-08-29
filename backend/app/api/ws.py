@@ -60,20 +60,41 @@ async def emit_tick(price: LivePrice) -> None:
     await bus.publish("market", msg)
 
 
+async def _simulator_ticks(instruments: list[str]) -> None:
+    for inst in instruments:
+        await emit_tick(simulator.tick(inst))
+
+
 async def price_pump() -> None:
+    """Push live ticks to /ws/market.
+
+    OANDA configured: consume the official pricing stream (not a REST poll).
+    Simulator: local tick generation. Warehouse sync is a separate task and
+    never participates in this loop.
+    """
     from app.services.run_control import is_paused
 
     instruments = list(INSTRUMENT_SPECS.keys())
     try:
         while True:
             if await is_paused():
-                await asyncio.sleep(0.85)
+                await asyncio.sleep(0.25)
                 continue
             settings = get_settings()
-            for inst in instruments:
-                px = simulator.tick(inst) if not settings.oanda_configured else await oanda.get_live_price(inst)
-                await emit_tick(px)
-            await asyncio.sleep(0.85)
+            if settings.oanda_configured:
+                try:
+                    async for px in oanda.stream_prices(instruments):
+                        if await is_paused():
+                            break
+                        await emit_tick(px)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.warning("OANDA price stream ended, reconnecting: %s", exc)
+                    await asyncio.sleep(1.0)
+            else:
+                await _simulator_ticks(instruments)
+                await asyncio.sleep(0.25)
     except asyncio.CancelledError:
         raise
 

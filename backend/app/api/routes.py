@@ -56,7 +56,21 @@ async def health() -> dict:
         "anthropicReady": bool(probe.get("ok")),
         "anthropicDetail": probe.get("detail") or "",
         **sdk_stats.snapshot(),
+        "goldWarehouse": await _gold_warehouse_health(),
     }
+
+
+async def _gold_warehouse_health() -> dict:
+    from app.services.gold_warehouse import timeframe_health
+
+    return await timeframe_health()
+
+
+@router.get("/warehouse/gaps")
+async def warehouse_gaps(timeframe: str | None = None) -> dict:
+    from app.services.gold_sync import gap_report
+
+    return await gap_report(timeframe)
 
 
 @router.get("/instruments")
@@ -88,6 +102,7 @@ async def candles(instrument: str = "XAU_USD", granularity: str = "M15", count: 
 
 @router.get("/prices")
 async def prices() -> dict:
+    """HTTP fallback for live prices when /ws/market is disconnected."""
     from app.services.simulator import INSTRUMENT_SPECS
 
     out = []

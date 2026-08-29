@@ -32,11 +32,15 @@ async def lifespan(app: FastAPI):
         apply_runtime_to_env(runtime)
     except Exception as exc:
         logger.warning("Could not load runtime settings: %s", exc)
+    from app.services.gold_sync import gold_sync_loop
+
     pump = asyncio.create_task(price_pump())
     reflector = asyncio.create_task(_reflection_loop())
+    warehouse = asyncio.create_task(gold_sync_loop())
     yield
     pump.cancel()
     reflector.cancel()
+    warehouse.cancel()
 
 
 async def _reflection_loop() -> None:
