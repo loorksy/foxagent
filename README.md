@@ -39,7 +39,7 @@ cd frontend && npm run dev -- --hostname 0.0.0.0 --port 3000
 
 Or `bash scripts/dev.sh`.
 
-UI: http://localhost:3000 · login, then the desk. `GET /api/health` is auth-protected; it probes Anthropic with a live `messages.create` (cached ~2 minutes) and reports `anthropicReady` / `anthropicDetail`. Settings → Verify key uses the stored key when the form field is empty. UI copy lives in `frontend/src/i18n/messages/` (register another locale in `frontend/src/i18n/index.ts`).
+UI: http://localhost:3000 · login, then the desk. `GET /api/health` is auth-protected; it probes Anthropic with a live `messages.create` (cached ~2 minutes) and reports `anthropicReady` / `anthropicDetail` plus Claude Agent SDK path counters (`sdkPathSuccessCount`, `sdkPathFallbackCount`, `sdkPathSuccessRate`). Settings → Verify key uses the stored key when the form field is empty. UI copy lives in `frontend/src/i18n/messages/` (register another locale in `frontend/src/i18n/index.ts`).
 
 Optional Postgres + Redis:
 

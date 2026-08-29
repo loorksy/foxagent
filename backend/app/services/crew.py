@@ -24,9 +24,24 @@ from app.services.agent import (
     extract_json_object,
     resolve_model,
 )
-from app.services.artifacts import ARTIFACT_PROTOCOL, ArtifactStreamParser, strip_ant_artifacts
-from app.services.mcp_tools import dispatch_tool, mcp_tool_specs, try_build_sdk_server
+from app.services.artifacts import ARTIFACT_PROTOCOL, ArtifactStreamParser, is_quick_question, strip_ant_artifacts
+from app.services.mcp_tools import (
+    dispatch_tool,
+    mcp_tool_specs,
+    reset_tool_emit,
+    set_tool_emit,
+    try_build_sdk_server,
+    tool_capture_chart_screenshot,
+)
 from app.services.memory_log import get_past_context, store_decision
+from app.services.sdk_runtime import (
+    build_sdk_options,
+    classify_sdk_failure,
+    sdk_query_arg,
+    stats as sdk_stats,
+    vision_user_content,
+)
+from app.services.simulator import normalize_granularity
 from app.services.risk_rules import RiskRejected
 from app.services.run_control import DebateBudget, RunCancelled, raise_if_cancelled
 from app.services.session_store import append_session_event
@@ -43,7 +58,10 @@ TECHNICAL_SYSTEM = (
     + "\n\nYou are TechnicalAgent. Focus only on ICT / SMC: liquidity sweeps, "
     "order blocks, FVGs, displacement, multi-timeframe structure (1D → 4H → 15m). "
     "Use get_candles, calculate_ict_levels, structure_scan, capture_chart_screenshot, "
-    "query_technical_memory. Return a structured technical brief. "
+    "draw_on_chart, query_technical_memory. "
+    "For a full analysis you MUST visually inspect the attached chart image (or call "
+    "capture_chart_screenshot if none is attached) before writing the brief. "
+    "Use draw_on_chart to annotate FVGs, liquidity, or S/R you are reasoning about. "
     "Do not invent candle prints. Do not emit a final TradeRecommendation JSON — "
     "the RiskManagerAgent will decide."
 )
@@ -160,90 +178,99 @@ async def _try_sdk_turn(
     model: str,
     session_id: str | None = None,
     user_message: str = "",
+    require_sdk: bool = False,
+    image_b64: str | None = None,
 ) -> str | None:
     try:
-        from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
-    except Exception:
-        return None
+        from claude_agent_sdk import ClaudeSDKClient
+    except Exception as exc:
+        reason = f"SDK import failed: {exc}"
+        sdk_stats.record_config_error(reason)
+        logger.error("SDK path config error for %s: %s", name, reason)
+        raise AgentUnavailable(reason) from exc
     server = try_build_sdk_server()
     if server is None:
-        return None
-    options = ClaudeAgentOptions(
-        model=model,
-        system_prompt=system,
-        mcp_servers={"oanda": server},
-        allowed_tools=[
-            "mcp__oanda__get_candles",
-            "mcp__oanda__get_live_price",
-            "mcp__oanda__capture_chart_screenshot",
-            "mcp__oanda__structure_scan",
-            "mcp__oanda__calculate_ict_levels",
-            "mcp__oanda__query_technical_memory",
-            "mcp__oanda__get_economic_calendar",
-            "mcp__oanda__get_market_sentiment",
-            "mcp__oanda__fetch_financial_news",
-            "mcp__oanda__query_macro_memory",
-            "mcp__oanda__validate_risk_rules",
-            "mcp__oanda__send_recommendation",
-            "mcp__oanda__record_post_trade_reflection",
-        ],
-        permission_mode="acceptEdits",
-        env={"ANTHROPIC_API_KEY": api_key},
-        max_turns=8,
-    )
+        reason = "SDK MCP server could not be built"
+        sdk_stats.record_config_error(reason)
+        logger.error("SDK path config error for %s: %s", name, reason)
+        raise AgentUnavailable(reason)
+    options = build_sdk_options(model=model, system=system, api_key=api_key, server=server)
     text_acc = ""
     parser = ArtifactStreamParser(
         emit, session_id=session_id, agent=name, run_id=run_id, user_message=user_message
     )
+    emit_token = set_tool_emit(emit)
     try:
-        async with ClaudeSDKClient(options=options) as client:
-            await client.query(user)
-            async for msg in client.receive_response():
-                content = getattr(msg, "content", None)
-                if not isinstance(content, list):
-                    continue
-                for block in content:
-                    btype = getattr(block, "type", "") or type(block).__name__
-                    if "Thinking" in str(btype) or btype == "thinking":
-                        tok = getattr(block, "thinking", "") or ""
-                        if tok:
+        try:
+            async with ClaudeSDKClient(options=options) as client:
+                await client.query(sdk_query_arg(user, image_b64))
+                async for msg in client.receive_response():
+                    if type(msg).__name__ == "ResultMessage" and getattr(msg, "is_error", False):
+                        status = getattr(msg, "api_error_status", None)
+                        detail = getattr(msg, "result", None) or getattr(msg, "errors", None)
+                        raise RuntimeError(f"SDK ResultMessage error status={status} {detail}")
+                    content = getattr(msg, "content", None)
+                    if not isinstance(content, list):
+                        continue
+                    for block in content:
+                        btype = getattr(block, "type", "") or type(block).__name__
+                        if "Thinking" in str(btype) or btype == "thinking":
+                            tok = getattr(block, "thinking", "") or ""
+                            if tok:
+                                await emit(
+                                    "agent_thought",
+                                    {"runId": run_id, "agent": name, "delta": tok, "text": tok},
+                                )
+                        elif hasattr(block, "text"):
+                            text_acc += block.text
+                            visible = await parser.feed(block.text)
+                            if visible:
+                                await emit(
+                                    "agent_thought",
+                                    {
+                                        "runId": run_id,
+                                        "agent": name,
+                                        "delta": visible,
+                                        "text": visible,
+                                        "channel": "text",
+                                    },
+                                )
+                        elif "ToolUse" in type(block).__name__ or btype == "tool_use":
                             await emit(
-                                "agent_thought",
-                                {"runId": run_id, "agent": name, "delta": tok, "text": tok},
-                            )
-                    elif hasattr(block, "text"):
-                        text_acc += block.text
-                        visible = await parser.feed(block.text)
-                        if visible:
-                            await emit(
-                                "agent_thought",
+                                "agent_tool_call",
                                 {
                                     "runId": run_id,
                                     "agent": name,
-                                    "delta": visible,
-                                    "text": visible,
-                                    "channel": "text",
+                                    "name": getattr(block, "name", ""),
+                                    "id": getattr(block, "id", ""),
+                                    "input": getattr(block, "input", {}) or {},
                                 },
                             )
-                    elif "ToolUse" in type(block).__name__ or btype == "tool_use":
-                        await emit(
-                            "agent_tool_call",
-                            {
-                                "runId": run_id,
-                                "agent": name,
-                                "name": getattr(block, "name", ""),
-                                "id": getattr(block, "id", ""),
-                                "input": getattr(block, "input", {}) or {},
-                            },
-                        )
-    except Exception as exc:
-        logger.warning("SDK turn failed for %s: %s", name, exc)
-        return None
-    leftover = await parser.flush()
-    await parser.ingest_complete(text_acc)
-    if leftover:
-        await emit("agent_thought", {"runId": run_id, "agent": name, "delta": leftover, "text": leftover, "channel": "text"})
-    return strip_ant_artifacts(text_acc) or text_acc
+        except AgentUnavailable:
+            raise
+        except Exception as exc:
+            kind = classify_sdk_failure(exc)
+            reason = f"{type(exc).__name__}: {exc}"
+            if kind == "config" or require_sdk:
+                sdk_stats.record_config_error(reason)
+                logger.error("SDK path failed for %s (config/required, no fallback): %s", name, reason)
+                raise AgentUnavailable(f"SDK path failed: {reason}") from exc
+            sdk_stats.record_fallback(reason)
+            logger.error(
+                "SDK path failed, reason: %s, falling back agent=%s runId=%s",
+                reason,
+                name,
+                run_id,
+            )
+            return None
+        leftover = await parser.flush()
+        await parser.ingest_complete(text_acc)
+        if leftover:
+            await emit("agent_thought", {"runId": run_id, "agent": name, "delta": leftover, "text": leftover, "channel": "text"})
+        sdk_stats.record_success()
+        return strip_ant_artifacts(text_acc) or text_acc
+    finally:
+        reset_tool_emit(emit_token)
 
 
 async def run_agent_turn(
@@ -259,6 +286,8 @@ async def run_agent_turn(
     tools: list[dict[str, Any]] | None = None,
     max_rounds: int = 8,
     user_message: str = "",
+    image_b64: str | None = None,
+    require_sdk: bool = False,
 ) -> tuple[str, TradeRecommendation | None]:
     sdk_text = await _try_sdk_turn(
         name=name,
@@ -270,8 +299,10 @@ async def run_agent_turn(
         model=model,
         session_id=session_id,
         user_message=user_message,
+        require_sdk=require_sdk,
+        image_b64=image_b64,
     )
-    if sdk_text:
+    if sdk_text is not None:
         parsed = extract_json_object(sdk_text)
         rec = None
         if parsed and "tradeSetup" in parsed:
@@ -287,7 +318,7 @@ async def run_agent_turn(
         raise AgentUnavailable("Anthropic SDK is not installed on the server") from exc
 
     client = anthropic.AsyncAnthropic(api_key=api_key)
-    messages: list[dict[str, Any]] = [{"role": "user", "content": user}]
+    messages: list[dict[str, Any]] = [{"role": "user", "content": vision_user_content(user, image_b64)}]
     tool_specs = tools if tools is not None else mcp_tool_specs()
     final_text = ""
     text_acc = ""
@@ -607,10 +638,47 @@ async def _run_crew_body(
     )
 
     raise_if_cancelled(run_id)
+    chart_b64: str | None = None
+    if not is_quick_question(req.message):
+        gran = normalize_granularity(req.timeframe)
+        chart_b64 = await tool_capture_chart_screenshot(req.symbol, gran, 180)
+        await emit(
+            "agent_tool_call",
+            {
+                "runId": run_id,
+                "agent": "TechnicalAgent",
+                "name": "capture_chart_screenshot",
+                "id": "vision-forced",
+                "input": {"instrument": req.symbol, "granularity": gran, "count": 180},
+            },
+        )
+        await emit(
+            "agent_tool_result",
+            {
+                "runId": run_id,
+                "agent": "TechnicalAgent",
+                "name": "capture_chart_screenshot",
+                "id": "vision-forced",
+                "output": {"image": "png", "bytes": len(chart_b64)},
+            },
+        )
+        if session_id:
+            await append_session_event(
+                session_id,
+                "tool",
+                {
+                    "agent": "TechnicalAgent",
+                    "name": "capture_chart_screenshot",
+                    "input": {"instrument": req.symbol, "granularity": gran},
+                    "output": {"ok": True, "forced": True},
+                },
+            )
     tech_user = (
         f"Instrument: {req.symbol}\nTimeframe: {req.timeframe}\n"
         f"{memory_prefix}Trader request:\n{req.message}\n\n{hist}"
     )
+    if chart_b64:
+        tech_user += "\nA live chart PNG is attached. Read price structure from it before concluding."
     technical, _ = await run_agent_turn(
         name="TechnicalAgent",
         system=TECHNICAL_SYSTEM,
@@ -621,6 +689,7 @@ async def _run_crew_body(
         model=model,
         session_id=session_id,
         user_message=req.message,
+        image_b64=chart_b64,
     )
 
     raise_if_cancelled(run_id)

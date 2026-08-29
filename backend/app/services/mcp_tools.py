@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from contextvars import ContextVar
 from typing import Any, Callable, Awaitable
 
 from app.services.analysis import analyze_structure, calculate_ict_levels, structure_summary
@@ -15,6 +16,15 @@ from app.services.risk_rules import RiskRejected, enforce_risk_gate, validate_ri
 from app.services.telegram_service import schedule_trade_alert
 
 Emit = Callable[[str, dict[str, Any]], Awaitable[None]]
+_current_emit: ContextVar[Emit | None] = ContextVar("foxagent_emit", default=None)
+
+
+def set_tool_emit(emit: Emit | None):
+    return _current_emit.set(emit)
+
+
+def reset_tool_emit(token) -> None:
+    _current_emit.reset(token)
 
 
 async def tool_get_candles(instrument: str, granularity: str, count: int = 300) -> list[dict[str, Any]]:
@@ -86,6 +96,21 @@ async def persist_recommendation(payload: dict[str, Any] | TradeRecommendation, 
     return {"ok": True, "recommendation": dumped}
 
 
+async def tool_draw_on_chart(overlays: list[dict[str, Any]] | None, emit: Emit | None = None) -> dict[str, Any]:
+    """Emit additive chart overlays the model chose during analysis."""
+    parsed: list[dict[str, Any]] = []
+    for item in overlays or []:
+        try:
+            parsed.append(KlineOverlay.model_validate(item).model_dump(mode="json"))
+        except Exception:
+            continue
+    payload = {"overlays": parsed, "additive": True}
+    sink = emit or _current_emit.get()
+    if sink:
+        await sink("agent_chart_overlays", payload)
+    return {"ok": True, **payload}
+
+
 async def tool_send_recommendation(payload: dict[str, Any], emit: Emit | None = None) -> dict[str, Any]:
     try:
         return await persist_recommendation(payload, emit)
@@ -119,7 +144,7 @@ def mcp_tool_specs() -> list[dict[str, Any]]:
         },
         {
             "name": "capture_chart_screenshot",
-            "description": "Render a dark candlestick chart snapshot (optional klineOverlays drawn first) and return a base64 PNG.",
+            "description": "Required for full analysis if no chart image is already attached. Render a dark candlestick chart snapshot (optional klineOverlays drawn first) and return a base64 PNG.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -233,6 +258,20 @@ def mcp_tool_specs() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "draw_on_chart",
+            "description": "Draw ICT structure on the live chart during analysis (FVG rects, liquidity lines, annotations). Additive — does not replace the final recommendation overlays.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "overlays": {
+                        "type": "array",
+                        "description": "klineOverlays: rect, trendLine, fibonacci, priceLine, textAnnotation",
+                    }
+                },
+                "required": ["overlays"],
+            },
+        },
+        {
             "name": "record_post_trade_reflection",
             "description": "Write a lesson-learned against a closed recommendation (TP / SL / expire).",
             "input_schema": {
@@ -297,6 +336,8 @@ async def dispatch_tool(name: str, args: dict[str, Any], emit: Emit | None = Non
             args["outcome"],
             float(args.get("pnl") or 0.0),
         )
+    if name == "draw_on_chart":
+        return await tool_draw_on_chart(args.get("overlays") or [], emit)
     raise ValueError(f"Unknown tool: {name}")
 
 
@@ -400,6 +441,15 @@ def try_build_sdk_server():
         return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
 
     @tool(
+        "draw_on_chart",
+        "Draw additive ICT overlays on the live chart during analysis.",
+        {"overlays": list},
+    )
+    async def draw_on_chart(args: dict[str, Any]) -> dict[str, Any]:
+        data = await tool_draw_on_chart(args.get("overlays") or [], None)
+        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
+
+    @tool(
         "record_post_trade_reflection",
         "Write a lesson after TP/SL/expire.",
         {"recommendation_id": str, "outcome": str, "pnl": float},
@@ -427,5 +477,6 @@ def try_build_sdk_server():
             query_macro_memory,
             validate_risk,
             record_reflection,
+            draw_on_chart,
         ],
     )

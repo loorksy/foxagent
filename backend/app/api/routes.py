@@ -44,6 +44,8 @@ async def health() -> dict:
     runtime = await load_runtime_settings()
     probe = await probe_anthropic(live_completion=True, use_cache=True)
     configured = bool(runtime.anthropicApiKey)
+    from app.services.sdk_runtime import stats as sdk_stats
+
     return {
         "ok": True,
         "service": settings.app_name,
@@ -53,6 +55,7 @@ async def health() -> dict:
         "anthropicKeyValid": bool(probe.get("keyValid")),
         "anthropicReady": bool(probe.get("ok")),
         "anthropicDetail": probe.get("detail") or "",
+        **sdk_stats.snapshot(),
     }
 
 
