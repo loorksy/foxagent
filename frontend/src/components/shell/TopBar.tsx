@@ -27,6 +27,7 @@ export function TopBar() {
         : "chat";
   const artifactsOpen = useChat((s) => s.artifactsOpen);
   const setArtifactsOpen = useChat((s) => s.setArtifactsOpen);
+  const hasArtifacts = useChat((s) => s.artifacts.length > 0);
   const toggleChart = useWorkspace((s) => s.toggleChart);
   const chartOpen = useWorkspace((s) => s.chartOpen);
   const symbol = useWorkspace((s) => s.symbol);
@@ -71,7 +72,7 @@ export function TopBar() {
             <CandlestickChart className="h-5 w-5" />
           </button>
         )}
-        {section === "chat" && (
+        {section === "chat" && hasArtifacts && (
           <button
             type="button"
             onClick={() => setArtifactsOpen(!artifactsOpen)}
