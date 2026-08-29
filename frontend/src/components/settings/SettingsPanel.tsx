@@ -55,6 +55,7 @@ export function SettingsPanel() {
   const setLocale = useLocale((s) => s.setLocale);
   const t = useT();
   const [probe, setProbe] = useState<{ ready?: boolean; configured?: boolean; keyValid?: boolean; detail?: string }>({});
+  const [paused, setPaused] = useState(false);
 
   useEffect(() => {
     void load().catch(() => undefined);
@@ -68,6 +69,10 @@ export function SettingsPanel() {
           detail: h.anthropicDetail,
         })
       )
+      .catch(() => undefined);
+    void api
+      .systemStatus()
+      .then((s) => setPaused(Boolean(s.paused)))
       .catch(() => undefined);
   }, [load]);
 
@@ -260,6 +265,21 @@ export function SettingsPanel() {
             {status}
           </p>
         )}
+
+        <section className="space-y-3 rounded-xl border border-border bg-card p-4">
+          <h2 className="text-sm font-semibold">{paused ? t("settings.paused") : t("settings.active")}</h2>
+          <button
+            type="button"
+            onClick={() => {
+              void (paused ? api.resumeSystem() : api.pauseSystem())
+                .then((s) => setPaused(Boolean(s.paused)))
+                .catch(() => undefined);
+            }}
+            className="w-full rounded-xl border border-border py-2.5 text-sm font-semibold"
+          >
+            {paused ? t("settings.resume") : t("settings.pause")}
+          </button>
+        </section>
 
         <button type="button" onClick={() => void save()} className="w-full rounded-xl bg-foreground py-2.5 text-sm font-semibold text-background">
           {t("settings.save")}

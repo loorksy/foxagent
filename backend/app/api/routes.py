@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.db import get_recommendation, list_recommendations, update_recommendation
 from app.services.mcp_tools import persist_recommendation
 from app.services.risk_rules import RiskRejected
+from app.services.run_control import is_paused, request_cancel, set_paused
 from app.schemas import CandleRequest, ChatRequest, SessionCreate, SessionUpdate, SettingsPayload, TradeRecommendation
 from app.services.agent import run_chat
 from app.services.memory_log import TERMINAL_STATUSES, get_past_context, list_entries
@@ -256,6 +257,8 @@ async def agent_chat_stream(body: ChatRequest):
         await queue.put({"type": event, "payload": payload})
         await emit_agent(event, payload)
 
+    run_box: dict[str, str | None] = {"id": body.sessionId}
+
     async def runner() -> None:
         try:
             await run_chat(body, emit)
@@ -271,12 +274,40 @@ async def agent_chat_stream(body: ChatRequest):
                 item = await queue.get()
                 if item is None:
                     break
+                if item.get("type") == "run_start":
+                    run_box["id"] = (item.get("payload") or {}).get("runId") or run_box["id"]
                 yield f"data: {json.dumps(item, default=str)}\n\n"
         finally:
+            if run_box.get("id"):
+                request_cancel(str(run_box["id"]))
             if not task.done():
                 task.cancel()
 
     return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+@router.post("/agent/chat/stream/cancel")
+async def agent_chat_cancel(body: dict = Body(...)) -> dict:
+    run_id = str(body.get("runId") or body.get("run_id") or "")
+    ok = request_cancel(run_id)
+    return {"ok": ok, "runId": run_id, "cancelled": ok}
+
+
+@router.get("/system/status")
+async def system_status() -> dict:
+    return {"paused": await is_paused()}
+
+
+@router.post("/system/pause")
+async def system_pause() -> dict:
+    await set_paused(True)
+    return {"paused": True}
+
+
+@router.post("/system/resume")
+async def system_resume() -> dict:
+    await set_paused(False)
+    return {"paused": False}
 
 
 @router.get("/models")

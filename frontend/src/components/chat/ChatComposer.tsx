@@ -4,6 +4,7 @@ import { FormEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, Square } from "lucide-react";
 import { DEFAULT_INSTRUMENTS, MODELS, QUICK_PROMPTS, SLASH_COMMANDS } from "@/lib/constants";
 import { sendAgentMessage } from "@/lib/agentSend";
+import { api } from "@/lib/api";
 import { useChat } from "@/stores/chat";
 import { useWorkspace } from "@/stores/workspace";
 import { cn } from "@/lib/utils";
@@ -125,7 +126,16 @@ export function ChatComposer({ hero = false }: { hero?: boolean }) {
             </select>
             <button
               type={streaming ? "button" : "submit"}
-              onClick={streaming ? () => useChat.getState().complete() : undefined}
+              onClick={
+                streaming
+                  ? () => {
+                      const state = useChat.getState();
+                      if (state.runId) void api.cancelRun(state.runId).catch(() => undefined);
+                      state.abort?.abort();
+                      state.complete();
+                    }
+                  : undefined
+              }
               disabled={!streaming && !value.trim()}
               className={cn(
                 "ms-auto flex size-8 items-center justify-center rounded-full disabled:opacity-40",

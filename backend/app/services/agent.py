@@ -134,12 +134,25 @@ async def run_chat(req: ChatRequest, emit: Emit) -> dict[str, Any]:
     )
 
     try:
+        from app.services.run_control import RunCancelled, SystemPaused, clear_cancel, raise_if_paused
+
+        await raise_if_paused()
         api_key = await resolve_anthropic_key()
         if not api_key:
             raise AgentUnavailable(
                 "ANTHROPIC_API_KEY is missing. Save a real key in Settings — FoxAgent will not invent a setup."
             )
         rec = await run_crew(req, emit, run_id, api_key, session_id)
+    except SystemPaused as exc:
+        detail = str(exc)
+        await emit("error", {"runId": run_id, "sessionId": session_id, "detail": detail, "paused": True})
+        await emit("run_complete", {"runId": run_id, "sessionId": session_id, "engine": None, "paused": True, "error": detail})
+        return {"runId": run_id, "sessionId": session_id, "engine": None, "recommendation": None, "error": detail, "paused": True}
+    except RunCancelled:
+        await emit("cancelled", {"runId": run_id, "sessionId": session_id})
+        await emit("run_complete", {"runId": run_id, "sessionId": session_id, "engine": "multi-agent-crew", "cancelled": True})
+        clear_cancel(run_id)
+        return {"runId": run_id, "sessionId": session_id, "engine": "multi-agent-crew", "recommendation": None, "cancelled": True}
     except AgentUnavailable as exc:
         logger.warning("Agent unavailable: %s", exc.detail)
         await emit("error", {"runId": run_id, "sessionId": session_id, "detail": exc.detail})

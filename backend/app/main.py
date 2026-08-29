@@ -41,13 +41,15 @@ async def lifespan(app: FastAPI):
 
 async def _reflection_loop() -> None:
     from app.services.reflection import scan_closed_recommendations
+    from app.services.run_control import is_paused
 
     await asyncio.sleep(8)
     while True:
         try:
-            written = await scan_closed_recommendations()
-            if written:
-                logger.info("Post-trade reflections written: %s", written)
+            if not await is_paused():
+                written = await scan_closed_recommendations()
+                if written:
+                    logger.info("Post-trade reflections written: %s", written)
         except Exception as exc:
             logger.warning("Reflection scan failed: %s", exc)
         await asyncio.sleep(45)

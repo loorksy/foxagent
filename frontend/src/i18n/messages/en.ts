@@ -118,4 +118,9 @@ export const en: Record<MessageKey, string> = {
   "login.password": "Password",
   "login.submit": "Sign in",
   "login.failed": "Sign-in failed",
+  "chat.cancelled": "Analysis stopped.",
+  "settings.pause": "Pause agent",
+  "settings.resume": "Resume agent",
+  "settings.paused": "The agent is paused. New analysis requests are refused.",
+  "settings.active": "The agent is active.",
 };

@@ -61,15 +61,25 @@ export const api = {
   deleteSession: (id: string) => http<{ ok: boolean }>(`/api/sessions/${id}`, { method: "DELETE" }),
   patchRecommendation: (id: string, patch: Record<string, unknown>) =>
     http<TradeRecommendation>(`/api/recommendations/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  cancelRun: (runId: string) =>
+    http<{ ok: boolean; cancelled?: boolean }>("/api/agent/chat/stream/cancel", {
+      method: "POST",
+      body: JSON.stringify({ runId }),
+    }),
+  systemStatus: () => http<{ paused: boolean }>("/api/system/status"),
+  pauseSystem: () => http<{ paused: boolean }>("/api/system/pause", { method: "POST" }),
+  resumeSystem: () => http<{ paused: boolean }>("/api/system/resume", { method: "POST" }),
   streamChat: async (
     body: { message: string; symbol: string; timeframe: string; model: string; sessionId?: string },
-    onEvent: (event: { type: string; payload: Record<string, unknown> }) => void
+    onEvent: (event: { type: string; payload: Record<string, unknown> }) => void,
+    signal?: AbortSignal
   ) => {
     const res = await fetch("/api/agent/chat/stream", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal,
     });
     if (res.status === 401) {
       redirectToLogin();

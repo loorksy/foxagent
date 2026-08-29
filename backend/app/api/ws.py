@@ -63,9 +63,14 @@ async def emit_tick(price: LivePrice) -> None:
 
 
 async def price_pump() -> None:
+    from app.services.run_control import is_paused
+
     instruments = list(INSTRUMENT_SPECS.keys())
     try:
         while True:
+            if await is_paused():
+                await asyncio.sleep(0.85)
+                continue
             settings = get_settings()
             for inst in instruments:
                 px = simulator.tick(inst) if not settings.oanda_configured else await oanda.get_live_price(inst)

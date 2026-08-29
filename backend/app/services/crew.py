@@ -28,9 +28,13 @@ from app.services.artifacts import ARTIFACT_PROTOCOL, ArtifactStreamParser, stri
 from app.services.mcp_tools import dispatch_tool, mcp_tool_specs, try_build_sdk_server
 from app.services.memory_log import get_past_context, store_decision
 from app.services.risk_rules import RiskRejected
+from app.services.run_control import DebateBudget, RunCancelled, raise_if_cancelled
 from app.services.session_store import append_session_event
 from app.services.settings_store import load_runtime_settings
 from app.services.telegram_service import schedule_trade_alert
+
+DEBATE_MAX_ROUNDS = 2
+DEBATE_MAX_SECONDS = 90.0
 
 logger = logging.getLogger(__name__)
 
@@ -464,7 +468,97 @@ async def run_agent_turn(
     return strip_ant_artifacts(raw) or raw, rec
 
 
+async def _run_debate(
+    *,
+    client: Any,
+    model: str,
+    debate_ctx: str,
+    emit: Any,
+    run_id: str,
+    session_id: str,
+    api_key: str,
+    user_message: str,
+) -> tuple[str, str]:
+    """Bull and Bear each speak twice: opening, then rebuttal. Hard-capped."""
+    budget = DebateBudget(max_rounds=DEBATE_MAX_ROUNDS, max_seconds=DEBATE_MAX_SECONDS)
+    bull = ""
+    bear = ""
+    while budget.allow_another():
+        raise_if_cancelled(run_id)
+        round_no = budget.calls // 2 + 1
+        if budget.calls % 2 == 0:
+            prompt = debate_ctx if not bear else (
+                f"{debate_ctx}\n\nBEAR ARGUMENT:\n{bear}\n\n"
+                f"This is bull rebuttal round {round_no}. Answer the bear's specific points. "
+                "Do not repeat your opening verbatim."
+            )
+            bull = await _stream_plain(
+                client=client,
+                model=model,
+                system=BULL_SYSTEM,
+                user=prompt,
+                emit=emit,
+                agent="BullResearcher",
+                run_id=run_id,
+                session_id=session_id,
+                api_key=api_key,
+                user_message=user_message,
+            )
+            await _emit_persist(
+                emit,
+                session_id,
+                "debate",
+                "agent_debate_message",
+                {"runId": run_id, "role": "bull", "agent": "BullResearcher", "text": bull, "round": round_no},
+            )
+        else:
+            prompt = (
+                f"{debate_ctx}\n\nBULL ARGUMENT:\n{bull}\n\n"
+                f"This is bear {'opening' if round_no == 1 else 'rebuttal'} round {round_no}. "
+                "Attack the latest bull case."
+            )
+            bear = await _stream_plain(
+                client=client,
+                model=model,
+                system=BEAR_SYSTEM,
+                user=prompt,
+                emit=emit,
+                agent="BearResearcher",
+                run_id=run_id,
+                session_id=session_id,
+                api_key=api_key,
+                user_message=user_message,
+            )
+            await _emit_persist(
+                emit,
+                session_id,
+                "debate",
+                "agent_debate_message",
+                {"runId": run_id, "role": "bear", "agent": "BearResearcher", "text": bear, "round": round_no},
+            )
+        budget.mark()
+    return bull, bear
+
+
 async def run_crew(
+    req: ChatRequest,
+    emit: Any,
+    run_id: str,
+    api_key: str,
+    session_id: str,
+) -> TradeRecommendation | None:
+    from app.services.run_control import raise_if_paused
+
+    await raise_if_paused()
+    raise_if_cancelled(run_id)
+    try:
+        return await _run_crew_body(req, emit, run_id, api_key, session_id)
+    except RunCancelled:
+        await emit("cancelled", {"runId": run_id, "sessionId": session_id})
+        raise
+
+
+async def _run_crew_body(
     req: ChatRequest,
     emit: Any,
     run_id: str,
@@ -512,6 +606,7 @@ async def run_crew(
         f"Recalled lessons (do not repeat these failure modes):\n{memory_block}\n\n" if memory_block else ""
     )
 
+    raise_if_cancelled(run_id)
     tech_user = (
         f"Instrument: {req.symbol}\nTimeframe: {req.timeframe}\n"
         f"{memory_prefix}Trader request:\n{req.message}\n\n{hist}"
@@ -528,6 +623,7 @@ async def run_crew(
         user_message=req.message,
     )
 
+    raise_if_cancelled(run_id)
     fund_user = (
         f"Instrument: {req.symbol}\nTimeframe: {req.timeframe}\n{memory_prefix}"
         f"Technical brief:\n{technical[:4000]}\n\nTrader request:\n{req.message}"
@@ -549,45 +645,19 @@ async def run_crew(
         f"TECHNICAL:\n{technical[:3500]}\n\nMACRO:\n{fundamental[:3500]}\n\n"
         f"TRADER:\n{req.message}"
     )
-    bull = await _stream_plain(
+    raise_if_cancelled(run_id)
+    bull, bear = await _run_debate(
         client=client,
         model=model,
-        system=BULL_SYSTEM,
-        user=debate_ctx,
+        debate_ctx=debate_ctx,
         emit=emit,
-        agent="BullResearcher",
         run_id=run_id,
         session_id=session_id,
         api_key=api_key,
         user_message=req.message,
-    )
-    await _emit_persist(
-        emit,
-        session_id,
-        "debate",
-        "agent_debate_message",
-        {"runId": run_id, "role": "bull", "agent": "BullResearcher", "text": bull},
-    )
-    bear = await _stream_plain(
-        client=client,
-        model=model,
-        system=BEAR_SYSTEM,
-        user=f"{debate_ctx}\n\nBULL ARGUMENT:\n{bull}",
-        emit=emit,
-        agent="BearResearcher",
-        run_id=run_id,
-        session_id=session_id,
-        api_key=api_key,
-        user_message=req.message,
-    )
-    await _emit_persist(
-        emit,
-        session_id,
-        "debate",
-        "agent_debate_message",
-        {"runId": run_id, "role": "bear", "agent": "BearResearcher", "text": bear},
     )
 
+    raise_if_cancelled(run_id)
     risk_user = (
         f"Instrument: {req.symbol}\nTimeframe: {req.timeframe}\n{memory_prefix}"
         f"TECHNICAL BRIEF:\n{technical[:3000]}\n\nMACRO BRIEF:\n{fundamental[:3000]}\n\n"

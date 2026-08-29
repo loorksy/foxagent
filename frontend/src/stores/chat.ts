@@ -27,6 +27,7 @@ type ChatState = {
   artifactsWidth: number;
   activeArtifactId: string | null;
   highlight: string | null;
+  abort: AbortController | null;
   setModel: (model: string) => void;
   setHighlight: (highlight: string | null) => void;
   setArtifactsOpen: (open: boolean) => void;
@@ -82,6 +83,7 @@ export const useChat = create<ChatState>((set) => ({
   artifactsWidth: 420,
   activeArtifactId: null,
   highlight: null,
+  abort: null,
   setModel: (model) => set({ model }),
   setHighlight: (highlight) => set({ highlight }),
   setArtifactsOpen: (artifactsOpen) => set({ artifactsOpen }),

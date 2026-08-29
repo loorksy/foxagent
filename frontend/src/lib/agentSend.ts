@@ -40,6 +40,8 @@ export async function sendAgentMessage(raw: string) {
 
   chat.pushUser(text);
   chat.startRun(`local_${Date.now()}`);
+  const controller = new AbortController();
+  useChat.setState({ abort: controller });
   try {
     await api.streamChat(
       {
@@ -106,17 +108,29 @@ export async function sendAgentMessage(raw: string) {
         if (type === "error" && (p.detail || p.message)) {
           useChat.getState().appendAssistant(String(p.detail || p.message));
         }
+        if (type === "run_complete" && p.paused) {
+          useChat.getState().appendAssistant(String(p.error || t("settings.paused")));
+        }
         if ((type === "agent_recommendation" || type === "recommendation") && p.id) {
           const rec = p as unknown as TradeRecommendation;
           useRecommendations.getState().upsert(rec);
           useWorkspace.getState().applyToChart(rec.klineOverlays || [], rec.focusTimestamp, rec.id);
           if (rec.rationale) useChat.getState().appendAssistant(rec.rationale, rec.id);
         }
-      }
+        if (type === "cancelled") {
+          useChat.getState().appendAssistant(t("chat.cancelled"));
+        }
+      },
+      controller.signal
     );
   } catch (err) {
-    useChat.getState().appendAssistant(err instanceof Error ? err.message : t("chat.agentFailed"));
+    if (err instanceof DOMException && err.name === "AbortError") {
+      useChat.getState().appendAssistant(t("chat.cancelled"));
+    } else {
+      useChat.getState().appendAssistant(err instanceof Error ? err.message : t("chat.agentFailed"));
+    }
   } finally {
+    useChat.setState({ abort: null });
     useChat.getState().complete();
   }
 }

@@ -116,6 +116,11 @@ export const ar = {
   "login.password": "كلمة المرور",
   "login.submit": "دخول",
   "login.failed": "تعذر تسجيل الدخول",
+  "chat.cancelled": "تم إيقاف التحليل.",
+  "settings.pause": "إيقاف الوكيل",
+  "settings.resume": "استئناف الوكيل",
+  "settings.paused": "الوكيل متوقف. لن تُشغَّل تحليلات جديدة.",
+  "settings.active": "الوكيل يعمل.",
 } as const
 
 export type MessageKey = keyof typeof ar
