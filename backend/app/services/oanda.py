@@ -60,41 +60,91 @@ class OandaClient:
             self._http = httpx.AsyncClient(timeout=30.0)
         return self._http
 
+    async def fetch_remote_candles(
+        self,
+        instrument: str,
+        granularity: str,
+        count: int | None = None,
+        from_time: datetime | None = None,
+        to_time: datetime | None = None,
+        include_first: bool = False,
+    ) -> list[OHLCV]:
+        """One OANDA/simulator page. Max 5000 candles (OANDA v20 limit)."""
+        from app.services.gold_sync import OandaRateLimitError
+
+        gran = normalize_granularity(granularity)
+        if gran == "D1":
+            gran = "D"
+        settings = get_settings()
+        page = min(count or 500, 5000)
+        if not settings.oanda_configured:
+            end = to_time
+            candles = generate_candles(instrument, gran, page, end=end)
+            if from_time:
+                candles = [c for c in candles if c.time > from_time or (include_first and c.time >= from_time)]
+            if to_time and not from_time:
+                candles = [c for c in candles if c.time < to_time]
+            if candles:
+                simulator.apply_close(instrument, candles[-1].close)
+            return candles
+
+        url = f"{settings.oanda_rest_base}/v3/instruments/{instrument}/candles"
+        params: dict[str, str] = {"granularity": gran, "price": "M"}
+        if from_time is not None:
+            params["from"] = from_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+            params["includeFirst"] = "true" if include_first else "false"
+        if to_time is not None:
+            params["to"] = to_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+        if not (from_time is not None and to_time is not None):
+            params["count"] = str(page)
+        client = await self._client()
+        resp = await client.get(url, headers=self._headers(), params=params)
+        if resp.status_code == 429:
+            raise OandaRateLimitError(resp.text[:200])
+        resp.raise_for_status()
+        data = resp.json()
+        candles: list[OHLCV] = []
+        for item in data.get("candles", []):
+            parsed = _candle_from_oanda(item)
+            if parsed:
+                candles.append(parsed)
+        if candles:
+            simulator.apply_close(instrument, candles[-1].close)
+        return candles
+
     async def get_candles(
         self,
         instrument: str,
         granularity: str,
         count: int = 300,
     ) -> list[OHLCV]:
+        from app.services.gold_sync import read_gold_candles
+        from app.services.gold_warehouse import uses_warehouse
+
         gran = normalize_granularity(granularity)
         settings = get_settings()
-        if not settings.oanda_configured:
-            candles = generate_candles(instrument, gran, count)
-            if candles:
-                simulator.apply_close(instrument, candles[-1].close)
-            return candles
+        source = "oanda" if settings.oanda_configured else "simulator"
+        if uses_warehouse(instrument, gran):
+            try:
+                return await read_gold_candles(
+                    gran,
+                    count,
+                    self.fetch_remote_candles,
+                    source=source,
+                )
+            except Exception as exc:
+                logger.warning("Gold warehouse read failed (%s), falling through to live: %s", gran, exc)
 
-        url = f"{settings.oanda_rest_base}/v3/instruments/{instrument}/candles"
-        params = {"granularity": gran, "count": str(min(count, 5000)), "price": "M"}
         try:
-            client = await self._client()
-            resp = await client.get(url, headers=self._headers(), params=params)
-            resp.raise_for_status()
-            data = resp.json()
-            candles: list[OHLCV] = []
-            for item in data.get("candles", []):
-                parsed = _candle_from_oanda(item)
-                if parsed:
-                    candles.append(parsed)
+            candles = await self.fetch_remote_candles(instrument, gran, count=count)
             if candles:
-                simulator.apply_close(instrument, candles[-1].close)
-            return candles
+                return candles
         except Exception as exc:
             logger.warning("OANDA candles failed (%s), using simulator: %s", instrument, exc)
-            candles = generate_candles(instrument, gran, count)
-            if candles:
-                simulator.apply_close(instrument, candles[-1].close)
-            return candles
+        candles = generate_candles(instrument, gran, count)
+        if candles:
+            simulator.apply_close(instrument, candles[-1].close)
+        return candles
 
     async def get_live_price(self, instrument: str) -> LivePrice:
         settings = get_settings()

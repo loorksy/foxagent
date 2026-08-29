@@ -44,6 +44,8 @@ TF_TO_GRANULARITY = {
     "1d": "D",
     "1D": "D",
     "D": "D",
+    "D1": "D",
+    "d1": "D",
 }
 
 

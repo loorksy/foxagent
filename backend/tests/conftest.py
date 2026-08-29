@@ -7,6 +7,7 @@ import pytest
 # Must be set before app.config.get_settings() is first constructed.
 os.environ.setdefault("APP_PASSWORD", "test-operator-password")
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret-do-not-use-in-prod")
+os.environ.setdefault("GOLD_WAREHOUSE_SYNC", "0")
 
 
 @pytest.fixture

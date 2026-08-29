@@ -55,8 +55,25 @@ async def health() -> dict:
         "anthropicKeyValid": bool(probe.get("keyValid")),
         "anthropicReady": bool(probe.get("ok")),
         "anthropicDetail": probe.get("detail") or "",
+<<<<<<< HEAD
         **sdk_stats.snapshot(),
+=======
+        "goldWarehouse": await _gold_warehouse_health(),
+>>>>>>> 1bad6c6 (feat: add rolling 2-year XAU_USD candle warehouse)
     }
+
+
+async def _gold_warehouse_health() -> dict:
+    from app.services.gold_warehouse import timeframe_health
+
+    return await timeframe_health()
+
+
+@router.get("/warehouse/gaps")
+async def warehouse_gaps(timeframe: str | None = None) -> dict:
+    from app.services.gold_sync import gap_report
+
+    return await gap_report(timeframe)
 
 
 @router.get("/instruments")
