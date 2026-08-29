@@ -73,5 +73,8 @@ export function wsUrl(path: string) {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   const explicit = process.env.NEXT_PUBLIC_WS_URL;
   if (explicit) return `${explicit}${path}`;
+  if (process.env.NEXT_PUBLIC_WS_SAME_ORIGIN === "1") {
+    return `${proto}//${window.location.host}${path}`;
+  }
   return `${proto}//${window.location.hostname}:8000${path}`;
 }
