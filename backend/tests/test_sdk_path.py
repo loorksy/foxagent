@@ -141,9 +141,19 @@ async def test_transient_sdk_failure_logs_and_increments_fallback(monkeypatch, c
         async def __anext__(self):
             raise StopAsyncIteration
 
+    class _Block:
+        type = "text"
+        text = "fallback brief"
+
+    class _Msg:
+        content = [_Block()]
+        stop_reason = "end_turn"
+
     class _Messages:
-        async def create(self, **_k):
-            return _Stream()
+        async def create(self, **kwargs):
+            if kwargs.get("stream"):
+                return _Stream()
+            return _Msg()
 
     class _Client:
         def __init__(self, *a, **k):

@@ -40,10 +40,20 @@ async def test_full_analysis_sends_official_image_content_block(monkeypatch):
         async def __anext__(self):
             raise StopAsyncIteration
 
+    class _Block:
+        type = "text"
+        text = "vision brief"
+
+    class _Msg:
+        content = [_Block()]
+        stop_reason = "end_turn"
+
     class _Messages:
         async def create(self, **kwargs):
             captured["messages"] = kwargs["messages"]
-            return _Stream()
+            if kwargs.get("stream"):
+                return _Stream()
+            return _Msg()
 
     class _Client:
         def __init__(self, *a, **k):
@@ -94,9 +104,12 @@ async def test_full_crew_invokes_capture_before_technical_turn(monkeypatch):
     async def fake_debate(**_k):
         return "bull", "bear"
 
+    async def no_session(*_a, **_k):
+        return None
+
     monkeypatch.setattr("app.services.crew.run_agent_turn", fake_turn)
     monkeypatch.setattr("app.services.crew._run_debate", fake_debate)
-    monkeypatch.setattr("app.services.session_store.get_session", lambda *_a, **_k: None)
+    monkeypatch.setattr("app.services.session_store.get_session", no_session)
 
     from app.schemas import ChatRequest
     from app.services.agent import AgentUnavailable
@@ -128,9 +141,12 @@ async def test_quick_question_skips_forced_vision(monkeypatch):
     async def fake_debate(**_k):
         return "bull", "bear"
 
+    async def no_session(*_a, **_k):
+        return None
+
     monkeypatch.setattr("app.services.crew.run_agent_turn", fake_turn)
     monkeypatch.setattr("app.services.crew._run_debate", fake_debate)
-    monkeypatch.setattr("app.services.session_store.get_session", lambda *_a, **_k: None)
+    monkeypatch.setattr("app.services.session_store.get_session", no_session)
 
     from app.schemas import ChatRequest
     from app.services.agent import AgentUnavailable
