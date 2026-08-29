@@ -15,5 +15,7 @@ pillow>=11.0.0
 cryptography>=43.0.0
 python-dotenv>=1.0.1
 orjson>=3.10.0
+pyjwt>=2.9.0
+bcrypt>=4.2.0
 pytest>=8.3.0
 pytest-asyncio>=0.24.0

@@ -2,14 +2,26 @@ import type { AgentSession, KLineBar, SettingsPayload, SettingsPublic, TradeReco
 
 const API = "";
 
+function redirectToLogin() {
+  if (typeof window === "undefined") return;
+  if (window.location.pathname.startsWith("/login")) return;
+  const next = encodeURIComponent(window.location.pathname + window.location.search);
+  window.location.href = `/login?next=${next}`;
+}
+
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     ...init,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(init?.headers || {}),
     },
   });
+  if (res.status === 401) {
+    redirectToLogin();
+    throw new Error("Unauthorized");
+  }
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `HTTP ${res.status}`);
@@ -18,6 +30,9 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  login: (password: string) => http<{ ok: boolean }>("/api/auth/login", { method: "POST", body: JSON.stringify({ password }) }),
+  logout: () => http<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
+  me: () => http<{ ok: boolean; operator?: boolean }>("/api/auth/me"),
   health: () =>
     http<{
       ok: boolean;
@@ -52,9 +67,14 @@ export const api = {
   ) => {
     const res = await fetch("/api/agent/chat/stream", {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+    if (res.status === 401) {
+      redirectToLogin();
+      throw new Error("Unauthorized");
+    }
     if (!res.ok || !res.body) {
       throw new Error(await res.text());
     }

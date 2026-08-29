@@ -111,6 +111,11 @@ export const ar = {
   "artifacts.tabDiagram": "مخطط",
   "artifacts.addRow": "صف جديد",
   "artifacts.diagramError": "تعذر رسم المخطط",
+  "login.title": "FoxAgent",
+  "login.intro": "أدخل كلمة مرور المشغّل للمتابعة.",
+  "login.password": "كلمة المرور",
+  "login.submit": "دخول",
+  "login.failed": "تعذر تسجيل الدخول",
 } as const
 
 export type MessageKey = keyof typeof ar

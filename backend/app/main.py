@@ -4,11 +4,16 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 
+from app.api.auth_routes import router as auth_router
 from app.api.routes import router as api_router
 from app.api.ws import router as ws_router, price_pump
+from app.auth import PUBLIC_API_PATHS, extract_request_token, require_token
 from app.bus import bus
 from app.config import get_settings
 from app.db import init_db
@@ -48,18 +53,31 @@ async def _reflection_loop() -> None:
         await asyncio.sleep(45)
 
 
+class AuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if path.startswith("/api/") and path not in PUBLIC_API_PATHS:
+            try:
+                require_token(extract_request_token(request))
+            except HTTPException as exc:
+                return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+        return await call_next(request)
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=settings.app_name, version="1.0.0", lifespan=lifespan)
     origins = settings.cors_origin_list
     wildcard = not origins or origins == ["*"]
+    app.add_middleware(AuthMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"] if wildcard else origins,
-        allow_credentials=not wildcard,
+        allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.include_router(auth_router, prefix="/api")
     app.include_router(api_router, prefix="/api")
     app.include_router(ws_router)
     return app

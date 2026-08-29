@@ -5,8 +5,9 @@ import json
 import logging
 from typing import Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 
+from app.auth import extract_ws_token, require_token
 from app.bus import bus
 from app.schemas import LivePrice
 from app.services.oanda import oanda
@@ -74,9 +75,20 @@ async def price_pump() -> None:
         raise
 
 
+async def _accept_authenticated(ws: WebSocket) -> bool:
+    try:
+        require_token(extract_ws_token(ws))
+    except Exception:
+        await ws.close(code=status.WS_1008_POLICY_VIOLATION)
+        return False
+    await ws.accept()
+    return True
+
+
 @router.websocket("/ws/market")
 async def market_ws(ws: WebSocket) -> None:
-    await ws.accept()
+    if not await _accept_authenticated(ws):
+        return
     await market_hub.add(ws)
     try:
         while True:
@@ -89,7 +101,8 @@ async def market_ws(ws: WebSocket) -> None:
 
 @router.websocket("/ws/agent")
 async def agent_ws(ws: WebSocket) -> None:
-    await ws.accept()
+    if not await _accept_authenticated(ws):
+        return
     await agent_hub.add(ws)
     try:
         while True:

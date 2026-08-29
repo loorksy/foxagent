@@ -113,4 +113,9 @@ export const en: Record<MessageKey, string> = {
   "artifacts.tabDiagram": "Diagram",
   "artifacts.addRow": "Add row",
   "artifacts.diagramError": "Mermaid could not render this diagram",
+  "login.title": "FoxAgent",
+  "login.intro": "Enter the operator password to continue.",
+  "login.password": "Password",
+  "login.submit": "Sign in",
+  "login.failed": "Sign-in failed",
 };
