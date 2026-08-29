@@ -15,7 +15,7 @@ import json
 import logging
 from typing import Any
 
-from app.db import save_recommendation
+from app.services.mcp_tools import persist_recommendation
 from app.schemas import ChatRequest, TradeRecommendation, new_id
 from app.services.agent import (
     SYSTEM_PROMPT,
@@ -27,6 +27,7 @@ from app.services.agent import (
 from app.services.artifacts import ARTIFACT_PROTOCOL, ArtifactStreamParser, strip_ant_artifacts
 from app.services.mcp_tools import dispatch_tool, mcp_tool_specs, try_build_sdk_server
 from app.services.memory_log import get_past_context, store_decision
+from app.services.risk_rules import RiskRejected
 from app.services.session_store import append_session_event
 from app.services.settings_store import load_runtime_settings
 from app.services.telegram_service import schedule_trade_alert
@@ -607,8 +608,14 @@ async def run_crew(
 
     if rec:
         rec.model = rec.model or model
-        await save_recommendation(rec)
-        schedule_trade_alert(rec)
+        try:
+            await persist_recommendation(rec, emit)
+        except RiskRejected as exc:
+            await emit("error", {"runId": run_id, "detail": str(exc), "gate": exc.result})
+            await append_session_event(
+                session_id, "message", {"role": "assistant", "text": f"Risk gate rejected: {exc}", "runId": run_id}
+            )
+            raise AgentUnavailable(f"Risk gate rejected the setup: {exc}") from exc
         dumped = rec.model_dump(mode="json") | {"runId": run_id}
         await emit("agent_recommendation", dumped)
         await emit("recommendation", dumped)

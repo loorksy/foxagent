@@ -11,7 +11,7 @@ from app.services.oanda import oanda
 from app.db import save_recommendation
 from app.schemas import KlineOverlay, TradeRecommendation
 from app.services.reflection import write_reflection
-from app.services.risk_rules import validate_risk_rules
+from app.services.risk_rules import RiskRejected, enforce_risk_gate, validate_risk_rules
 from app.services.telegram_service import schedule_trade_alert
 
 Emit = Callable[[str, dict[str, Any]], Awaitable[None]]
@@ -73,15 +73,24 @@ async def tool_record_post_trade_reflection(
     return result or {"ok": False, "detail": "No pending memory entry for this recommendation"}
 
 
-async def tool_send_recommendation(payload: dict[str, Any], emit: Emit | None = None) -> dict[str, Any]:
-    rec = TradeRecommendation.model_validate(payload)
+async def persist_recommendation(payload: dict[str, Any] | TradeRecommendation, emit: Emit | None = None) -> dict[str, Any]:
+    """Validate risk rules then write. The LLM cannot skip this by omitting a tool call."""
+    rec = payload if isinstance(payload, TradeRecommendation) else TradeRecommendation.model_validate(payload)
+    dumped = rec.model_dump(mode="json")
+    await enforce_risk_gate(dumped)
     await save_recommendation(rec)
     schedule_trade_alert(rec)
-    dumped = rec.model_dump(mode="json")
     if emit:
         await emit("recommendation", dumped)
         await emit("agent_recommendation", dumped)
     return {"ok": True, "recommendation": dumped}
+
+
+async def tool_send_recommendation(payload: dict[str, Any], emit: Emit | None = None) -> dict[str, Any]:
+    try:
+        return await persist_recommendation(payload, emit)
+    except RiskRejected as exc:
+        return {"ok": False, "rejected": True, "reasons": exc.result.get("reasons"), "gate": exc.result}
 
 
 def mcp_tool_specs() -> list[dict[str, Any]]:

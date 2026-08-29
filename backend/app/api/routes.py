@@ -7,7 +7,9 @@ from fastapi import APIRouter, Body, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.config import get_settings
-from app.db import get_recommendation, list_recommendations, save_recommendation, update_recommendation
+from app.db import get_recommendation, list_recommendations, update_recommendation
+from app.services.mcp_tools import persist_recommendation
+from app.services.risk_rules import RiskRejected
 from app.schemas import CandleRequest, ChatRequest, SessionCreate, SessionUpdate, SettingsPayload, TradeRecommendation
 from app.services.agent import run_chat
 from app.services.memory_log import TERMINAL_STATUSES, get_past_context, list_entries
@@ -31,7 +33,7 @@ from app.services.settings_store import (
     validate_anthropic_key,
     validate_oanda,
 )
-from app.services.telegram_service import schedule_trade_alert, send_test_ping
+from app.services.telegram_service import send_test_ping
 from app.services.simulator import INSTRUMENT_SPECS, normalize_granularity
 from app.api.ws import emit_agent
 
@@ -132,10 +134,11 @@ async def rec_one(rec_id: str) -> dict:
 
 @router.post("/recommendations")
 async def rec_create(body: TradeRecommendation) -> dict:
-    saved = await save_recommendation(body)
-    schedule_trade_alert(saved)
-    await emit_agent("recommendation", saved.model_dump(mode="json"))
-    return saved.model_dump(mode="json")
+    try:
+        result = await persist_recommendation(body.model_dump(mode="json"), emit_agent)
+    except RiskRejected as exc:
+        raise HTTPException(400, {"detail": "Risk gate rejected", "reasons": exc.result.get("reasons"), "gate": exc.result}) from exc
+    return result["recommendation"]
 
 
 @router.patch("/recommendations/{rec_id}")

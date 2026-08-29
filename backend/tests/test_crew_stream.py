@@ -64,14 +64,18 @@ async def test_crew_emits_real_event_contract(monkeypatch):
     async def load_runtime():
         return Runtime()
 
-    async def fake_save(rec):
-        return rec
+    async def fake_persist(rec, emit=None):
+        dumped = rec.model_dump(mode="json")
+        if emit:
+            await emit("recommendation", dumped)
+            await emit("agent_recommendation", dumped)
+        return {"ok": True, "recommendation": dumped}
 
     monkeypatch.setattr("app.services.crew.run_agent_turn", fake_turn)
     monkeypatch.setattr("app.services.crew._stream_plain", fake_plain)
     monkeypatch.setattr("app.services.crew.get_past_context", past_context)
     monkeypatch.setattr("app.services.crew.load_runtime_settings", load_runtime)
-    monkeypatch.setattr("app.services.crew.save_recommendation", fake_save)
+    monkeypatch.setattr("app.services.crew.persist_recommendation", fake_persist)
     monkeypatch.setattr("app.services.crew.schedule_trade_alert", lambda rec: None)
     monkeypatch.setattr("app.services.memory_log.SessionLocal", None)
     monkeypatch.setattr("app.services.session_store.SessionLocal", None)
