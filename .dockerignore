@@ -1,0 +1,10 @@
+**/.git
+**/.venv
+**/node_modules
+**/.next
+**/__pycache__
+**/backend/data
+**/*.sqlite3
+**/.foxagent.key
+**/.env
+**/deploy/.env
