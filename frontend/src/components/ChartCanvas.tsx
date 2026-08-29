@@ -137,6 +137,8 @@ const ChartCanvas = forwardRef<ChartHandle, Props>(function ChartCanvas({ classN
       applyOverlays(chart, command.overlays, true).then(() => {
         focusTimestamp(chart, command.focusTimestamp);
       });
+    } else if (command.type === "append") {
+      applyOverlays(chart, command.overlays, true);
     }
   }, [command]);
 

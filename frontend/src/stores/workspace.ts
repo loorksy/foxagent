@@ -8,6 +8,7 @@ type Period = (typeof PERIODS)[number];
 
 type ChartCommand =
   | { type: "apply"; overlays: KlineOverlay[]; focusTimestamp?: number | null; recId?: string }
+  | { type: "append"; overlays: KlineOverlay[] }
   | { type: "clear" }
   | { type: "focus"; timestamp: number };
 
@@ -27,6 +28,7 @@ type WorkspaceState = {
   setPrice: (price: LivePrice) => void;
   setDataMode: (mode: "oanda" | "simulator") => void;
   applyToChart: (overlays: KlineOverlay[], focusTimestamp?: number | null, recId?: string) => void;
+  appendToChart: (overlays: KlineOverlay[]) => void;
   clearOverlays: () => void;
   focusTimestamp: (timestamp: number) => void;
 };
@@ -54,6 +56,11 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
   applyToChart: (overlays, focusTimestamp, recId) =>
     set({
       command: { type: "apply", overlays, focusTimestamp, recId },
+      chartOpen: true,
+    }),
+  appendToChart: (overlays) =>
+    set({
+      command: { type: "append", overlays },
       chartOpen: true,
     }),
   clearOverlays: () => set({ command: { type: "clear" } }),

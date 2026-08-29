@@ -35,7 +35,7 @@ Multi-timeframe process (mandatory):
 
 Dual-pass:
 - Call get_candles and structure_scan on HTF, MTF, and entry TF.
-- Call capture_chart_screenshot for visual confirmation (head & shoulders, trendlines, S/R taps, false breakouts).
+- A live chart PNG is attached on full-analysis turns. Read it. Call capture_chart_screenshot only if you need another timeframe or overlay. Use draw_on_chart to annotate structure you are reasoning about.
 - Then synthesize ONE TradeRecommendation.
 
 Output contract (final message MUST contain a single JSON object, no markdown fences):

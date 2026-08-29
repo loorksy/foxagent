@@ -163,6 +163,9 @@ export async function sendAgentMessage(raw: string) {
         if (type === "run_complete" && p.paused) {
           useChat.getState().appendAssistant(String(p.error || t("settings.paused")));
         }
+        if (type === "agent_chart_overlays" && Array.isArray(p.overlays)) {
+          useWorkspace.getState().appendToChart(p.overlays as import("@/lib/types").KlineOverlay[]);
+        }
         if ((type === "agent_recommendation" || type === "recommendation") && p.id) {
           const rec = p as unknown as TradeRecommendation;
           useRecommendations.getState().upsert(rec);

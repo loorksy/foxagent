@@ -64,6 +64,7 @@ def test_required_agent_tools_are_registered():
         "validate_risk_rules",
         "send_recommendation",
         "record_post_trade_reflection",
+        "draw_on_chart",
     ):
         assert required in names
 
