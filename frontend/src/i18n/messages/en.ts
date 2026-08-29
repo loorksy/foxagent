@@ -106,4 +106,11 @@ export const en: Record<MessageKey, string> = {
   "artifacts.close": "Close artifacts",
   "artifacts.open": "Artifacts",
   "artifacts.preview": "Preview",
+  "artifacts.language": "Language",
+  "artifacts.tabMarkdown": "Markdown",
+  "artifacts.tabCode": "Code",
+  "artifacts.tabSheet": "Sheet",
+  "artifacts.tabDiagram": "Diagram",
+  "artifacts.addRow": "Add row",
+  "artifacts.diagramError": "Mermaid could not render this diagram",
 };

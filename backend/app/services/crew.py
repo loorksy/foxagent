@@ -24,7 +24,7 @@ from app.services.agent import (
     extract_json_object,
     resolve_model,
 )
-from app.services.artifacts import stream_artifact
+from app.services.artifacts import ARTIFACT_PROTOCOL, ArtifactStreamParser, strip_ant_artifacts
 from app.services.mcp_tools import dispatch_tool, mcp_tool_specs, try_build_sdk_server
 from app.services.memory_log import get_past_context, store_decision
 from app.services.session_store import append_session_event
@@ -49,18 +49,22 @@ FUNDAMENTAL_SYSTEM = (
     "Use get_economic_calendar, get_market_sentiment, fetch_financial_news, query_macro_memory. "
     "Do not invent economic prints. If a feed is empty or failed, say so. "
     "Return a structured macro brief. Do not emit a TradeRecommendation JSON."
+    + ARTIFACT_PROTOCOL
 )
 
 BULL_SYSTEM = (
     "You are the bull researcher. Argue FOR taking a directional setup using ONLY "
     "the technical and fundamental briefs. Be concrete about POIs, session, and confluence. "
-    "4–8 sentences. English only."
+    "4–8 sentences. English only. Do not emit artifacts unless the trader asked for a standalone document."
+    + ARTIFACT_PROTOCOL
 )
 
 BEAR_SYSTEM = (
     "You are the bear researcher. Argue AGAINST the proposed setup using ONLY "
     "the briefs and the bull argument. Attack unmitigated FVGs, session risk, "
-    "calendar, and missing confluence. 4–8 sentences. English only."
+    "calendar, and missing confluence. 4–8 sentences. English only. "
+    "Do not emit artifacts unless the trader asked for a standalone document."
+    + ARTIFACT_PROTOCOL
 )
 
 RISK_SYSTEM = (
@@ -95,6 +99,7 @@ async def _stream_plain(
     run_id: str,
     session_id: str | None,
     api_key: str,
+    user_message: str = "",
 ) -> str:
     try:
         stream = await client.messages.create(
@@ -108,19 +113,35 @@ async def _stream_plain(
         raise AgentUnavailable(f"Claude API error: {_sanitize_error(exc, api_key)}") from exc
 
     parts: list[str] = []
+    parser = ArtifactStreamParser(
+        emit, session_id=session_id, agent=agent, run_id=run_id, user_message=user_message
+    )
     async for event in stream:
         if getattr(event, "type", "") != "content_block_delta":
             continue
         delta = event.delta
         text = ""
+        channel = "text"
         if getattr(delta, "type", "") == "thinking_delta":
             text = getattr(delta, "thinking", "") or ""
+            channel = "thinking"
         elif getattr(delta, "type", "") == "text_delta":
             text = getattr(delta, "text", "") or ""
-        if text:
-            parts.append(text)
-            await emit("agent_thought", {"runId": run_id, "agent": agent, "delta": text, "text": text})
-    return "".join(parts).strip()
+        if not text:
+            continue
+        parts.append(text)
+        visible = text if channel == "thinking" else await parser.feed(text)
+        if visible:
+            await emit(
+                "agent_thought",
+                {"runId": run_id, "agent": agent, "delta": visible, "text": visible, "channel": channel},
+            )
+    leftover = await parser.flush()
+    raw = "".join(parts)
+    await parser.ingest_complete(raw)
+    if leftover:
+        await emit("agent_thought", {"runId": run_id, "agent": agent, "delta": leftover, "text": leftover})
+    return strip_ant_artifacts(raw) or raw.strip()
 
 
 async def _try_sdk_turn(
@@ -132,6 +153,8 @@ async def _try_sdk_turn(
     run_id: str,
     api_key: str,
     model: str,
+    session_id: str | None = None,
+    user_message: str = "",
 ) -> str | None:
     try:
         from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
@@ -164,6 +187,9 @@ async def _try_sdk_turn(
         max_turns=8,
     )
     text_acc = ""
+    parser = ArtifactStreamParser(
+        emit, session_id=session_id, agent=name, run_id=run_id, user_message=user_message
+    )
     try:
         async with ClaudeSDKClient(options=options) as client:
             await client.query(user)
@@ -182,16 +208,18 @@ async def _try_sdk_turn(
                             )
                     elif hasattr(block, "text"):
                         text_acc += block.text
-                        await emit(
-                            "agent_thought",
-                            {
-                                "runId": run_id,
-                                "agent": name,
-                                "delta": block.text,
-                                "text": block.text,
-                                "channel": "text",
-                            },
-                        )
+                        visible = await parser.feed(block.text)
+                        if visible:
+                            await emit(
+                                "agent_thought",
+                                {
+                                    "runId": run_id,
+                                    "agent": name,
+                                    "delta": visible,
+                                    "text": visible,
+                                    "channel": "text",
+                                },
+                            )
                     elif "ToolUse" in type(block).__name__ or btype == "tool_use":
                         await emit(
                             "agent_tool_call",
@@ -206,7 +234,11 @@ async def _try_sdk_turn(
     except Exception as exc:
         logger.warning("SDK turn failed for %s: %s", name, exc)
         return None
-    return text_acc
+    leftover = await parser.flush()
+    await parser.ingest_complete(text_acc)
+    if leftover:
+        await emit("agent_thought", {"runId": run_id, "agent": name, "delta": leftover, "text": leftover, "channel": "text"})
+    return strip_ant_artifacts(text_acc) or text_acc
 
 
 async def run_agent_turn(
@@ -221,9 +253,18 @@ async def run_agent_turn(
     session_id: str | None,
     tools: list[dict[str, Any]] | None = None,
     max_rounds: int = 8,
+    user_message: str = "",
 ) -> tuple[str, TradeRecommendation | None]:
     sdk_text = await _try_sdk_turn(
-        name=name, system=system, user=user, emit=emit, run_id=run_id, api_key=api_key, model=model
+        name=name,
+        system=system,
+        user=user,
+        emit=emit,
+        run_id=run_id,
+        api_key=api_key,
+        model=model,
+        session_id=session_id,
+        user_message=user_message,
     )
     if sdk_text:
         parsed = extract_json_object(sdk_text)
@@ -244,8 +285,12 @@ async def run_agent_turn(
     messages: list[dict[str, Any]] = [{"role": "user", "content": user}]
     tool_specs = tools if tools is not None else mcp_tool_specs()
     final_text = ""
+    text_acc = ""
     rec: TradeRecommendation | None = None
     use_thinking = True
+    parser = ArtifactStreamParser(
+        emit, session_id=session_id, agent=name, run_id=run_id, user_message=user_message
+    )
 
     for _ in range(max_rounds):
         kwargs: dict[str, Any] = {
@@ -299,10 +344,12 @@ async def run_agent_turn(
                     tok = getattr(delta, "text", "") or ""
                     if tok:
                         text_acc += tok
-                        await emit(
-                            "agent_thought",
-                            {"runId": run_id, "agent": name, "delta": tok, "text": tok, "channel": "text"},
-                        )
+                        visible = await parser.feed(tok)
+                        if visible:
+                            await emit(
+                                "agent_thought",
+                                {"runId": run_id, "agent": name, "delta": visible, "text": visible, "channel": "text"},
+                            )
 
         if not text_acc and not tool_uses:
             try:
@@ -319,16 +366,18 @@ async def run_agent_turn(
             for block in msg.content:
                 if block.type == "text":
                     text_acc += block.text
-                    await emit(
-                        "agent_thought",
-                        {
-                            "runId": run_id,
-                            "agent": name,
-                            "delta": block.text,
-                            "text": block.text,
-                            "channel": "text",
-                        },
-                    )
+                    visible = await parser.feed(block.text)
+                    if visible:
+                        await emit(
+                            "agent_thought",
+                            {
+                                "runId": run_id,
+                                "agent": name,
+                                "delta": visible,
+                                "text": visible,
+                                "channel": "text",
+                            },
+                        )
                     assistant_content.append({"type": "text", "text": block.text})
                 elif block.type == "tool_use":
                     tool_uses.append({"id": block.id, "name": block.name, "input": dict(block.input)})
@@ -355,7 +404,7 @@ async def run_agent_turn(
                 {"type": "tool_use", "id": t["id"], "name": t["name"], "input": t["input"]} for t in tool_uses
             )
 
-        parsed = extract_json_object(text_acc)
+        parsed = extract_json_object(strip_ant_artifacts(text_acc) or text_acc)
         if parsed and "tradeSetup" in parsed:
             try:
                 rec = TradeRecommendation.model_validate(parsed)
@@ -406,7 +455,12 @@ async def run_agent_turn(
         messages.append({"role": "assistant", "content": assistant_content})
         messages.append({"role": "user", "content": results})
 
-    return final_text, rec
+    leftover = await parser.flush()
+    raw = final_text or text_acc
+    await parser.ingest_complete(raw)
+    if leftover:
+        await emit("agent_thought", {"runId": run_id, "agent": name, "delta": leftover, "text": leftover, "channel": "text"})
+    return strip_ant_artifacts(raw) or raw, rec
 
 
 async def run_crew(
@@ -470,17 +524,8 @@ async def run_crew(
         api_key=api_key,
         model=model,
         session_id=session_id,
+        user_message=req.message,
     )
-    if technical:
-        await stream_artifact(
-            emit,
-            session_id=session_id,
-            title=f"Technical brief {req.symbol} {req.timeframe}",
-            artifact_type="ict_report",
-            body=technical,
-            agent="TechnicalAgent",
-            run_id=run_id,
-        )
 
     fund_user = (
         f"Instrument: {req.symbol}\nTimeframe: {req.timeframe}\n{memory_prefix}"
@@ -495,17 +540,8 @@ async def run_crew(
         api_key=api_key,
         model=model,
         session_id=session_id,
+        user_message=req.message,
     )
-    if fundamental:
-        await stream_artifact(
-            emit,
-            session_id=session_id,
-            title=f"Macro brief {req.symbol}",
-            artifact_type="macro_report",
-            body=fundamental,
-            agent="FundamentalAgent",
-            run_id=run_id,
-        )
 
     debate_ctx = (
         f"Instrument {req.symbol} {req.timeframe}\n\n"
@@ -522,6 +558,7 @@ async def run_crew(
         run_id=run_id,
         session_id=session_id,
         api_key=api_key,
+        user_message=req.message,
     )
     await _emit_persist(
         emit,
@@ -540,6 +577,7 @@ async def run_crew(
         run_id=run_id,
         session_id=session_id,
         api_key=api_key,
+        user_message=req.message,
     )
     await _emit_persist(
         emit,
@@ -564,6 +602,7 @@ async def run_crew(
         api_key=api_key,
         model=model,
         session_id=session_id,
+        user_message=req.message,
     )
 
     if rec:
@@ -581,15 +620,6 @@ async def run_crew(
             decision=json.dumps(dumped, default=str)[:4000],
             rating=rec.sentiment.value if hasattr(rec.sentiment, "value") else str(rec.sentiment),
             recommendation_id=rec.id,
-        )
-        await stream_artifact(
-            emit,
-            session_id=session_id,
-            title=f"Trade blueprint {req.symbol}",
-            artifact_type="trade_blueprint",
-            body=json.dumps(dumped, indent=2, default=str),
-            agent="RiskManagerAgent",
-            run_id=run_id,
         )
         return rec
 

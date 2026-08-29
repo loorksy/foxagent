@@ -88,7 +88,8 @@ export async function sendAgentMessage(raw: string) {
           useChat.getState().startArtifact({
             id: String(p.id),
             title: String(p.title || "Artifact"),
-            type: String(p.type || "markdown"),
+            type: String(p.type || "text/markdown"),
+            language: p.language ? String(p.language) : undefined,
             agent: p.agent ? String(p.agent) : undefined,
             body: "",
           });

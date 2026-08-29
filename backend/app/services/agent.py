@@ -6,6 +6,7 @@ import re
 from typing import Any, Callable, Awaitable
 
 from app.schemas import ChatRequest, TradeRecommendation, new_id
+from app.services.artifacts import ARTIFACT_PROTOCOL
 from app.services.settings_store import resolve_anthropic_key
 
 logger = logging.getLogger(__name__)
@@ -69,7 +70,7 @@ Output contract (final message MUST contain a single JSON object, no markdown fe
 Overlay timestamps MUST be real candle timestamps in milliseconds from get_candles.
 Respect minimum R:R of 1:2. Prefer LIMIT entries at FVG / OB equilibrium.
 Call send_recommendation with the same JSON when complete.
-"""
+""" + ARTIFACT_PROTOCOL
 
 
 class AgentUnavailable(Exception):

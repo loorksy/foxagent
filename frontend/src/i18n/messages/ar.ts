@@ -104,6 +104,13 @@ export const ar = {
   "artifacts.close": "إغلاق المخرجات",
   "artifacts.open": "المخرجات",
   "artifacts.preview": "معاينة",
+  "artifacts.language": "اللغة",
+  "artifacts.tabMarkdown": "ماركداون",
+  "artifacts.tabCode": "كود",
+  "artifacts.tabSheet": "جدول",
+  "artifacts.tabDiagram": "مخطط",
+  "artifacts.addRow": "صف جديد",
+  "artifacts.diagramError": "تعذر رسم المخطط",
 } as const
 
 export type MessageKey = keyof typeof ar

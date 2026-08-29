@@ -90,10 +90,8 @@ async def test_crew_emits_real_event_contract(monkeypatch):
     assert "agent_tool_call" in kinds
     assert "agent_tool_result" in kinds
     assert "agent_debate_message" in kinds
-    assert "agent_artifact_start" in kinds
-    assert "agent_artifact_delta" in kinds
-    assert "agent_artifact_end" in kinds
     assert "agent_recommendation" in kinds
+    assert not any(name.startswith("agent_artifact") for name in kinds)
     assert not any(name == "phase" for name in kinds)
     recall = next(p for n, p in events if n == "agent_memory_recall")
     assert "unmitigated" in recall["text"].lower()

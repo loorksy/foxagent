@@ -121,6 +121,7 @@ export type Artifact = {
   id: string;
   title: string;
   type: string;
+  language?: string;
   agent?: string;
   body: string;
   createdAt?: string;
