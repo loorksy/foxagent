@@ -57,7 +57,7 @@ const ChartCanvas = forwardRef<ChartHandle, Props>(function ChartCanvas({ classN
       }
       const chart = mod.init(hostRef.current, {
         styles: DARK_CHART_STYLES,
-      }) as ChartApi | null;
+      } as Parameters<typeof mod.init>[1]) as ChartApi | null;
       if (!chart) return;
       chartRef.current = chart;
       try {

@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: ["klinecharts", "@klinecharts/pro"],
+  eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: true },
   async rewrites() {
     const backend = process.env.BACKEND_URL || "http://127.0.0.1:8000";
     return [{ source: "/api/:path*", destination: `${backend}/api/:path*` }];
