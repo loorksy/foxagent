@@ -1,49 +1,45 @@
 "use client";
 
 import { create } from "zustand";
-import type { ChatMessage } from "@/lib/types";
-import { uid } from "@/lib/utils";
+import type { AgentSession, ChatMessage } from "@/lib/types";
+import { api } from "@/lib/api";
 import { t } from "@/i18n";
 import { useChat } from "./chat";
+import { useWorkspace } from "./workspace";
 
 export type ChatSession = {
   id: string;
   title: string;
   updatedAt: number;
-  messages: ChatMessage[];
+  symbol: string;
+  timeframe: string;
+  raw?: AgentSession;
 };
-
-const LS = "foxagent_chats_v1";
-
-function readAll(): ChatSession[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(LS);
-    return raw ? (JSON.parse(raw) as ChatSession[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeAll(sessions: ChatSession[]) {
-  try {
-    localStorage.setItem(LS, JSON.stringify(sessions));
-  } catch {
-    /* ignore */
-  }
-}
 
 type SessionsState = {
   sessions: ChatSession[];
   activeId: string | null;
   query: string;
-  hydrate: () => void;
+  hydrate: () => Promise<void>;
   setQuery: (query: string) => void;
-  newChat: () => void;
-  openChat: (id: string) => void;
-  removeChat: (id: string) => void;
+  setActiveId: (id: string | null) => void;
+  openSession: (id: string) => Promise<void>;
+  ensureSession: (id: string) => Promise<AgentSession>;
+  removeChat: (id: string) => Promise<void>;
   persistActive: (messages: ChatMessage[]) => void;
 };
+
+function toCard(item: AgentSession): ChatSession {
+  const updated = item.updatedAt ? Date.parse(item.updatedAt) : Date.now();
+  return {
+    id: item.id,
+    title: item.title || t("chats.untitled"),
+    updatedAt: Number.isFinite(updated) ? updated : Date.now(),
+    symbol: item.symbol,
+    timeframe: item.timeframe,
+    raw: item,
+  };
+}
 
 function titleFrom(messages: ChatMessage[]) {
   const first = messages.find((m) => m.role === "user");
@@ -54,21 +50,44 @@ export const useSessions = create<SessionsState>((set, get) => ({
   sessions: [],
   activeId: null,
   query: "",
-  hydrate: () => set({ sessions: readAll() }),
+  hydrate: async () => {
+    try {
+      const data = await api.sessions();
+      set({ sessions: (data.sessions || []).map(toCard) });
+    } catch {
+      /* backend may still be booting */
+    }
+  },
   setQuery: (query) => set({ query }),
-  newChat: () => {
-    useChat.getState().clearChat();
-    set({ activeId: null });
+  setActiveId: (activeId) => set({ activeId }),
+  openSession: async (id) => {
+    const item = await get().ensureSession(id);
+    useChat.getState().hydrateFromSession(item);
+    if (item.symbol) useWorkspace.getState().setSymbol(item.symbol);
+    if (item.timeframe) useWorkspace.getState().setTimeframe(item.timeframe);
+    const overlays = item.state?.overlays;
+    if (overlays?.length) useWorkspace.getState().applyToChart(overlays, null, item.state?.recommendationId || undefined);
+    set((s) => ({
+      activeId: id,
+      sessions: s.sessions.some((x) => x.id === id)
+        ? s.sessions.map((x) => (x.id === id ? toCard(item) : x))
+        : [toCard(item), ...s.sessions],
+    }));
   },
-  openChat: (id) => {
-    const session = get().sessions.find((s) => s.id === id);
-    if (!session) return;
-    useChat.getState().loadMessages(session.messages);
-    set({ activeId: id });
+  ensureSession: async (id) => {
+    try {
+      return await api.getSession(id);
+    } catch {
+      return api.createSession({ id });
+    }
   },
-  removeChat: (id) => {
+  removeChat: async (id) => {
+    try {
+      await api.deleteSession(id);
+    } catch {
+      /* already gone */
+    }
     const sessions = get().sessions.filter((s) => s.id !== id);
-    writeAll(sessions);
     if (get().activeId === id) {
       useChat.getState().clearChat();
       set({ sessions, activeId: null });
@@ -77,25 +96,26 @@ export const useSessions = create<SessionsState>((set, get) => ({
     set({ sessions });
   },
   persistActive: (messages) => {
-    if (!messages.length) return;
-    const { sessions, activeId } = get();
-    const now = Date.now();
-    if (activeId) {
-      const next = sessions.map((s) =>
-        s.id === activeId ? { ...s, messages, title: titleFrom(messages), updatedAt: now } : s
-      );
-      writeAll(next);
-      set({ sessions: next });
-      return;
-    }
-    const created: ChatSession = {
-      id: uid("chat"),
-      title: titleFrom(messages),
-      updatedAt: now,
-      messages,
-    };
-    const next = [created, ...sessions];
-    writeAll(next);
-    set({ sessions: next, activeId: created.id });
+    const { activeId, sessions } = get();
+    if (!activeId || !messages.length) return;
+    const title = titleFrom(messages);
+    const next = sessions.map((s) => (s.id === activeId ? { ...s, title, updatedAt: Date.now() } : s));
+    set({ sessions: next });
+    const chat = useChat.getState();
+    void api
+      .saveSession(activeId, {
+        title,
+        state: {
+          messages,
+          thoughts: chat.thoughts,
+          tools: chat.tools,
+          debate: chat.debate,
+          artifacts: chat.artifacts,
+          recalls: chat.recalls,
+          overlays: useWorkspace.getState().command?.type === "apply" ? useWorkspace.getState().command.overlays : [],
+          recommendationId: messages.find((m) => m.recommendationId)?.recommendationId || null,
+        },
+      })
+      .catch(() => undefined);
   },
 }));

@@ -1,39 +1,41 @@
 "use client";
 
-import { LineChart, MessageSquareText, PanelLeft, PanelLeftClose, Settings, X } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { FileStack, LineChart, MessageSquareText, PanelLeft, PanelLeftClose, Settings, X } from "lucide-react";
 import { FoxLogo } from "./FoxLogo";
 import { Conversations } from "./Conversations";
-import { useUi, type UiSection } from "@/stores/ui";
+import { useUi } from "@/stores/ui";
+import { useSessions } from "@/stores/sessions";
+import { useChat } from "@/stores/chat";
 import { cn } from "@/lib/utils";
 import { useT, type MessageKey } from "@/i18n";
 
 const FOCUS =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1";
 
-const NAV: { id: UiSection; labelKey: MessageKey; icon: typeof MessageSquareText }[] = [
-  { id: "chat", labelKey: "nav.chat", icon: MessageSquareText },
-  { id: "recommendations", labelKey: "nav.recommendations", icon: LineChart },
-  { id: "settings", labelKey: "nav.settings", icon: Settings },
+const NAV: { href: string; match: string; labelKey: MessageKey; icon: typeof MessageSquareText }[] = [
+  { href: "/agents", match: "/agents", labelKey: "nav.chat", icon: MessageSquareText },
+  { href: "/recommendations", match: "/recommendations", labelKey: "nav.recommendations", icon: LineChart },
+  { href: "/settings", match: "/settings", labelKey: "nav.settings", icon: Settings },
 ];
 
 function NavList({ iconOnly, onNavigate }: { iconOnly: boolean; onNavigate?: () => void }) {
-  const section = useUi((s) => s.section);
-  const setSection = useUi((s) => s.setSection);
+  const pathname = usePathname() || "/";
+  const activeId = useSessions((s) => s.activeId);
   const t = useT();
   return (
     <nav className="flex shrink-0 flex-col gap-0.5 px-2 py-2" aria-label={t("nav.aria")}>
       {NAV.map((item) => {
         const Icon = item.icon;
-        const active = section === item.id;
+        const href = item.match === "/agents" && activeId ? `/agents/${activeId}` : item.href;
+        const active = pathname.startsWith(item.match);
         const label = t(item.labelKey);
         return (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => {
-              setSection(item.id);
-              onNavigate?.();
-            }}
+          <Link
+            key={item.href}
+            href={href}
+            onClick={() => onNavigate?.()}
             title={iconOnly ? label : undefined}
             className={cn(
               "relative flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors lg:min-h-10",
@@ -45,9 +47,25 @@ function NavList({ iconOnly, onNavigate }: { iconOnly: boolean; onNavigate?: () 
             {active && <span className="absolute inset-y-2 start-0 w-0.5 rounded-full bg-foreground" />}
             <Icon className={cn("shrink-0", iconOnly ? "h-5 w-5" : "h-4 w-4")} />
             {!iconOnly && <span className="truncate">{label}</span>}
-          </button>
+          </Link>
         );
       })}
+      <button
+        type="button"
+        onClick={() => {
+          useChat.getState().setArtifactsOpen(!useChat.getState().artifactsOpen);
+          onNavigate?.();
+        }}
+        title={iconOnly ? t("artifacts.open") : undefined}
+        className={cn(
+          "relative flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground lg:min-h-10",
+          FOCUS,
+          iconOnly && "justify-center px-0"
+        )}
+      >
+        <FileStack className={cn("shrink-0", iconOnly ? "h-5 w-5" : "h-4 w-4")} />
+        {!iconOnly && <span className="truncate">{t("artifacts.open")}</span>}
+      </button>
     </nav>
   );
 }
@@ -57,15 +75,16 @@ export function Sidebar() {
   const setCollapsed = useUi((s) => s.setSidebarCollapsed);
   const mobileOpen = useUi((s) => s.mobileOpen);
   const setMobileOpen = useUi((s) => s.setMobileOpen);
+  const activeId = useSessions((s) => s.activeId);
   const t = useT();
 
   const header = (
     <div className={cn("flex h-14 shrink-0 items-center border-b border-sidebar-border px-3", collapsed ? "justify-center" : "justify-between gap-2")}>
       {!collapsed ? (
         <>
-          <button type="button" onClick={() => useUi.getState().setSection("chat")} className={cn("flex min-w-0 items-center rounded-lg", FOCUS)}>
+          <Link href={activeId ? `/agents/${activeId}` : "/agents"} className={cn("flex min-w-0 items-center rounded-lg", FOCUS)}>
             <FoxLogo size={36} showName nameClassName="truncate text-[15px] font-semibold tracking-tight" />
-          </button>
+          </Link>
           <button
             type="button"
             onClick={() => setCollapsed(true)}

@@ -5,14 +5,19 @@ import { AgentAvatar } from "./AgentAvatar";
 import { ChatComposer } from "./ChatComposer";
 import { ChatThinking } from "./ChatThinking";
 import { RecommendationCard } from "./RecommendationCard";
+import { ArtifactsWorkspace } from "./ArtifactsWorkspace";
 import { useChat } from "@/stores/chat";
 import { useRecommendations } from "@/stores/recommendations";
 import { useSessions } from "@/stores/sessions";
+import { cn } from "@/lib/utils";
 import { useT } from "@/i18n";
 
 export function ChatPanel() {
   const messages = useChat((s) => s.messages);
   const streaming = useChat((s) => s.streaming);
+  const thoughts = useChat((s) => s.thoughts);
+  const debate = useChat((s) => s.debate);
+  const highlight = useChat((s) => s.highlight);
   const recs = useRecommendations((s) => s.items);
   const persistActive = useSessions((s) => s.persistActive);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -45,8 +50,11 @@ export function ChatPanel() {
     };
   }, [isHero]);
 
+  const showInspector = streaming || thoughts.length > 0 || debate.length > 0;
+
   return (
-    <div ref={panelRef} className="chat-panel-shell h-full w-full bg-transparent">
+    <div className="flex h-full min-w-0 flex-1">
+    <div ref={panelRef} className="chat-panel-shell h-full w-full min-w-0 flex-1 bg-transparent">
       <div
         ref={scrollerRef}
         data-hero={isHero || undefined}
@@ -81,10 +89,18 @@ export function ChatPanel() {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex min-w-0 items-start gap-2.5 px-1 py-2 text-[0.9375rem] leading-7">
+                    <div
+                      id={m.id}
+                      className={cn(
+                        "flex min-w-0 items-start gap-2.5 px-1 py-2 text-[0.9375rem] leading-7",
+                        highlight === m.id && "rounded-xl ring-1 ring-warning"
+                      )}
+                    >
                       <AgentAvatar thinking={Boolean(m.streaming)} />
                       <div className="min-w-0 flex-1">
-                        {m.streaming ? <ChatThinking /> : null}
+                        {m.streaming || (showInspector && m.id === messages.filter((x) => x.role === "assistant").at(-1)?.id) ? (
+                          <ChatThinking />
+                        ) : null}
                         {m.streaming && m.text ? (
                           <p className="whitespace-pre-wrap py-0.5 leading-7">
                             {m.text}
@@ -124,6 +140,8 @@ export function ChatPanel() {
           </div>
         </div>
       )}
+    </div>
+    <ArtifactsWorkspace />
     </div>
   );
 }

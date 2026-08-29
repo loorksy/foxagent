@@ -8,8 +8,18 @@ from fastapi.responses import StreamingResponse
 
 from app.config import get_settings
 from app.db import get_recommendation, list_recommendations, save_recommendation, update_recommendation
-from app.schemas import CandleRequest, ChatRequest, SettingsPayload, TradeRecommendation
+from app.schemas import CandleRequest, ChatRequest, SessionCreate, SessionUpdate, SettingsPayload, TradeRecommendation
 from app.services.agent import run_chat
+from app.services.memory_log import TERMINAL_STATUSES, get_past_context, list_entries
+from app.services.reflection import write_reflection
+from app.services.session_store import (
+    create_session,
+    delete_session,
+    ensure_session,
+    get_session,
+    list_sessions,
+    save_session,
+)
 from app.services.analysis import analyze_structure, structure_summary
 from app.services.chart_capture import render_candles_b64
 from app.services.oanda import oanda
@@ -133,7 +143,69 @@ async def rec_patch(rec_id: str, patch: dict = Body(...)) -> dict:
     updated = await update_recommendation(rec_id, patch)
     if not updated:
         raise HTTPException(404, "Not found")
+    status = str(updated.get("status") or "")
+    if status in TERMINAL_STATUSES:
+        try:
+            await write_reflection(rec_id, status, float(updated.get("pnlPips") or 0.0))
+        except Exception:
+            pass
     return updated
+
+
+@router.get("/sessions")
+async def sessions_list() -> dict:
+    return {"sessions": await list_sessions(80)}
+
+
+@router.post("/sessions")
+async def sessions_create(body: SessionCreate | None = None) -> dict:
+    payload = body or SessionCreate()
+    if payload.id:
+        return await ensure_session(payload.id, payload.symbol, payload.timeframe, payload.title)
+    return await create_session(payload.symbol, payload.timeframe, payload.title)
+
+
+@router.get("/sessions/{session_id}")
+async def sessions_get(session_id: str) -> dict:
+    item = await get_session(session_id)
+    if not item:
+        raise HTTPException(404, "Not found")
+    return item
+
+
+@router.put("/sessions/{session_id}")
+async def sessions_put(session_id: str, body: SessionUpdate) -> dict:
+    item = await get_session(session_id)
+    if not item:
+        item = await ensure_session(session_id, body.symbol or "XAU_USD", body.timeframe or "15m", body.title or "")
+    if body.title is not None:
+        item["title"] = body.title
+    if body.symbol is not None:
+        item["symbol"] = body.symbol
+    if body.timeframe is not None:
+        item["timeframe"] = body.timeframe
+    if body.state is not None:
+        item["state"] = body.state
+    return await save_session(item)
+
+
+@router.delete("/sessions/{session_id}")
+async def sessions_delete(session_id: str) -> dict:
+    ok = await delete_session(session_id)
+    if not ok:
+        raise HTTPException(404, "Not found")
+    return {"ok": True}
+
+
+@router.get("/memory")
+async def memory_list(symbol: str | None = None) -> dict:
+    return {"entries": await list_entries(symbol=symbol, include_pending=True)}
+
+
+@router.get("/memory/context")
+async def memory_context(symbol: str = "XAU_USD", query: str = "") -> dict:
+    text = await get_past_context(symbol, query=query)
+    return {"symbol": symbol, "context": text}
 
 
 @router.get("/settings")

@@ -5,22 +5,12 @@ import logging
 import re
 from typing import Any, Callable, Awaitable
 
-from app.db import save_recommendation
-from app.services.telegram_service import schedule_trade_alert
 from app.schemas import ChatRequest, TradeRecommendation, new_id
-from app.services.mcp_tools import dispatch_tool, mcp_tool_specs, try_build_sdk_server
-from app.services.settings_store import load_runtime_settings, resolve_anthropic_key
+from app.services.settings_store import resolve_anthropic_key
 
 logger = logging.getLogger(__name__)
 
 Emit = Callable[[str, dict[str, Any]], Awaitable[None]]
-
-PHASES = [
-    {"id": 1, "name": "Fetching OANDA Candles (1D, 4H, 15M)", "detail": "Multi-timeframe OHLCV ingest"},
-    {"id": 2, "name": "Visual Chart Inspection & Liquidity Mapping", "detail": "Claude Vision + ICT structure"},
-    {"id": 3, "name": "Macro & Sentiment Ingestion", "detail": "Session liquidity, HTF bias, confluence"},
-    {"id": 4, "name": "Synthesizing Recommendation & Chart Annotations", "detail": "Overlays, entry, SL, TP"},
-]
 
 MODEL_ALIASES = {
     "sonnet": "claude-sonnet-4-5",
@@ -119,231 +109,28 @@ def _sanitize_error(exc: Exception, api_key: str = "") -> str:
     return text[:400]
 
 
-async def _set_phase(emit: Emit, run_id: str, phase_id: int, status: str, detail: str = "") -> None:
-    phase = next(p for p in PHASES if p["id"] == phase_id)
+async def run_chat(req: ChatRequest, emit: Emit) -> dict[str, Any]:
+    from app.services.crew import run_crew
+    from app.services.session_store import append_session_event, ensure_session, save_session
+
+    run_id = new_id("run")
+    rec: TradeRecommendation | None = None
+    session = await ensure_session(req.sessionId, req.symbol, req.timeframe)
+    session_id = session["id"]
     await emit(
-        "phase",
+        "run_start",
         {
             "runId": run_id,
-            "phase": {**phase, "status": status, "detail": detail or phase["detail"]},
+            "sessionId": session_id,
+            "symbol": req.symbol,
+            "model": req.model,
         },
     )
-
-
-async def run_anthropic_loop(req: ChatRequest, emit: Emit, run_id: str, api_key: str) -> TradeRecommendation:
-    try:
-        import anthropic
-    except ImportError as exc:
-        raise AgentUnavailable("Anthropic SDK is not installed on the server") from exc
-
-    runtime = await load_runtime_settings()
-    model = resolve_model(req.model or runtime.defaultClaudeModel)
-    client = anthropic.AsyncAnthropic(api_key=api_key)
-    tools = mcp_tool_specs()
-    messages: list[dict[str, Any]] = [
-        {
-            "role": "user",
-            "content": (
-                f"Instrument {req.symbol}. Working timeframe {req.timeframe}. "
-                f"User prompt: {req.message}\n"
-                "Run the full MTF + vision process, then emit the recommendation JSON."
-            ),
-        }
-    ]
-
-    await _set_phase(emit, run_id, 1, "active")
-    rec: TradeRecommendation | None = None
-    last_error = ""
-
-    for _turn in range(10):
-        try:
-            stream = await client.messages.create(
-                model=model,
-                max_tokens=8000,
-                system=SYSTEM_PROMPT,
-                tools=tools,
-                messages=messages,
-                stream=True,
-            )
-        except Exception as exc:
-            last_error = _sanitize_error(exc, api_key)
-            logger.warning("Anthropic call failed: %s", last_error)
-            raise AgentUnavailable(f"Claude API error: {last_error}") from exc
-
-        text_acc = ""
-        tool_uses: list[dict[str, Any]] = []
-        async for event in stream:
-            et = getattr(event, "type", "")
-            if et == "content_block_delta":
-                delta = event.delta
-                if getattr(delta, "type", "") == "text_delta":
-                    chunk = delta.text
-                    text_acc += chunk
-                    await emit("token", {"runId": run_id, "text": chunk})
-                elif getattr(delta, "type", "") == "thinking_delta":
-                    await emit("thought", {"runId": run_id, "text": getattr(delta, "thinking", "")})
-            elif et == "content_block_start":
-                block = event.content_block
-                if getattr(block, "type", "") == "tool_use":
-                    tool_uses.append({"id": block.id, "name": block.name, "input": dict(block.input or {})})
-
-        if not text_acc and not tool_uses:
-            try:
-                msg = await client.messages.create(
-                    model=model,
-                    max_tokens=8000,
-                    system=SYSTEM_PROMPT,
-                    tools=tools,
-                    messages=messages,
-                )
-            except Exception as exc:
-                last_error = _sanitize_error(exc, api_key)
-                logger.warning("Anthropic non-stream failed: %s", last_error)
-                raise AgentUnavailable(f"Claude API error: {last_error}") from exc
-            tool_uses = []
-            for block in msg.content:
-                if block.type == "text":
-                    text_acc += block.text
-                    await emit("token", {"runId": run_id, "text": block.text})
-                elif block.type == "tool_use":
-                    tool_uses.append({"id": block.id, "name": block.name, "input": dict(block.input)})
-            stop_reason = msg.stop_reason
-            assistant_content = [b.model_dump() for b in msg.content]
-        else:
-            stop_reason = "tool_use" if tool_uses else "end_turn"
-            assistant_content = []
-            if text_acc:
-                assistant_content.append({"type": "text", "text": text_acc})
-            assistant_content.extend(
-                {"type": "tool_use", "id": t["id"], "name": t["name"], "input": t["input"]} for t in tool_uses
-            )
-
-        parsed = extract_json_object(text_acc)
-        if parsed and "tradeSetup" in parsed:
-            try:
-                rec = TradeRecommendation.model_validate(parsed)
-            except Exception:
-                rec = None
-
-        if stop_reason != "tool_use" or not tool_uses:
-            if rec:
-                await save_recommendation(rec)
-                schedule_trade_alert(rec)
-                await emit("recommendation", rec.model_dump(mode="json") | {"runId": run_id})
-                return rec
-            if text_acc.strip():
-                await emit("assistant", {"runId": run_id, "text": text_acc.strip()})
-                raise AgentUnavailable("Claude responded without a TradeRecommendation JSON")
-            raise AgentUnavailable(last_error or "Claude returned an empty response")
-
-        tool_results = []
-        for t in tool_uses:
-            await emit("thought", {"runId": run_id, "text": f"Tool {t['name']}({json.dumps(t['input'])[:120]})"})
-            if t["name"] == "get_candles":
-                await _set_phase(emit, run_id, 1, "active", f"{t['input']}")
-            if t["name"] == "capture_chart_screenshot":
-                await _set_phase(emit, run_id, 2, "active")
-            if t["name"] == "send_recommendation":
-                await _set_phase(emit, run_id, 4, "active")
-            try:
-                result = await dispatch_tool(t["name"], t["input"], emit)
-                if t["name"] == "capture_chart_screenshot":
-                    content: Any = [
-                        {
-                            "type": "image",
-                            "source": {"type": "base64", "media_type": "image/png", "data": result},
-                        }
-                    ]
-                else:
-                    content = json.dumps(result, default=str)[:20000]
-                if t["name"] == "send_recommendation" and isinstance(result, bool):
-                    await _set_phase(emit, run_id, 4, "complete")
-            except Exception as exc:
-                content = f"error: {exc}"
-            tool_results.append(
-                {"type": "tool_result", "tool_use_id": t["id"], "content": content}
-            )
-
-        messages.append({"role": "assistant", "content": assistant_content})
-        messages.append({"role": "user", "content": tool_results})
-        await _set_phase(emit, run_id, 1, "complete")
-
-    if rec:
-        return rec
-    raise AgentUnavailable("Claude tool loop ended without a TradeRecommendation")
-
-
-async def run_claude_agent_sdk(req: ChatRequest, emit: Emit, run_id: str, api_key: str) -> TradeRecommendation | None:
-    try:
-        from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
-    except Exception:
-        return None
-
-    server = try_build_sdk_server()
-    if server is None:
-        return None
-
-    runtime = await load_runtime_settings()
-    model = resolve_model(req.model or runtime.defaultClaudeModel)
-    options = ClaudeAgentOptions(
-        model=model,
-        system_prompt=SYSTEM_PROMPT,
-        mcp_servers={"oanda": server},
-        allowed_tools=[
-            "mcp__oanda__get_candles",
-            "mcp__oanda__get_live_price",
-            "mcp__oanda__capture_chart_screenshot",
-            "mcp__oanda__structure_scan",
-            "mcp__oanda__send_recommendation",
-        ],
-        permission_mode="acceptEdits",
-        env={"ANTHROPIC_API_KEY": api_key},
-        max_turns=12,
+    await append_session_event(
+        session_id,
+        "message",
+        {"role": "user", "text": req.message, "createdAt": __import__("time").time() * 1000},
     )
-    text_acc = ""
-    try:
-        async with ClaudeSDKClient(options=options) as client:
-            await client.query(
-                f"Instrument {req.symbol}. Timeframe {req.timeframe}. User: {req.message}"
-            )
-            async for msg in client.receive_response():
-                msg_type = type(msg).__name__
-                content = getattr(msg, "content", None)
-                if isinstance(content, list):
-                    for block in content:
-                        btype = getattr(block, "type", "") or type(block).__name__
-                        if "Thinking" in str(btype) or btype == "thinking":
-                            await emit("thought", {"runId": run_id, "text": getattr(block, "thinking", str(block))})
-                        elif hasattr(block, "text"):
-                            text_acc += block.text
-                            await emit("token", {"runId": run_id, "text": block.text})
-                        elif "ToolUse" in str(type(block).__name__):
-                            await emit(
-                                "thought",
-                                {"runId": run_id, "text": f"SDK tool {getattr(block, 'name', '')}"},
-                            )
-                elif msg_type == "ResultMessage":
-                    break
-    except Exception as exc:
-        logger.warning("Claude Agent SDK failed, trying Messages API: %s", exc)
-        await emit("thought", {"runId": run_id, "text": f"Agent SDK unavailable ({_sanitize_error(exc, api_key)}). Trying Messages API."})
-        return None
-
-    parsed = extract_json_object(text_acc)
-    if parsed and "tradeSetup" in parsed:
-        rec = TradeRecommendation.model_validate(parsed)
-        await save_recommendation(rec)
-        schedule_trade_alert(rec)
-        await emit("recommendation", rec.model_dump(mode="json") | {"runId": run_id})
-        return rec
-    return None
-
-
-async def run_chat(req: ChatRequest, emit: Emit) -> dict[str, Any]:
-    run_id = new_id("run")
-    await emit("run_start", {"runId": run_id, "symbol": req.symbol, "model": req.model, "phases": PHASES})
-    rec: TradeRecommendation | None = None
-    engine: str | None = None
 
     try:
         api_key = await resolve_anthropic_key()
@@ -351,21 +138,51 @@ async def run_chat(req: ChatRequest, emit: Emit) -> dict[str, Any]:
             raise AgentUnavailable(
                 "ANTHROPIC_API_KEY is missing. Save a real key in Settings — FoxAgent will not invent a setup."
             )
-
-        rec = await run_claude_agent_sdk(req, emit, run_id, api_key)
-        if rec:
-            engine = "claude-agent-sdk"
-        else:
-            rec = await run_anthropic_loop(req, emit, run_id, api_key)
-            engine = "anthropic-tools"
+        rec = await run_crew(req, emit, run_id, api_key, session_id)
     except AgentUnavailable as exc:
         logger.warning("Agent unavailable: %s", exc.detail)
-        await emit("error", {"runId": run_id, "detail": exc.detail})
-        await emit("run_complete", {"runId": run_id, "engine": None, "recommendationId": None, "error": exc.detail})
-        return {"runId": run_id, "engine": None, "recommendation": None, "error": exc.detail}
+        await emit("error", {"runId": run_id, "sessionId": session_id, "detail": exc.detail})
+        await emit(
+            "run_complete",
+            {
+                "runId": run_id,
+                "sessionId": session_id,
+                "engine": None,
+                "recommendationId": None,
+                "error": exc.detail,
+            },
+        )
+        return {
+            "runId": run_id,
+            "sessionId": session_id,
+            "engine": None,
+            "recommendation": None,
+            "error": exc.detail,
+        }
+
+    if rec:
+        session["title"] = req.message.strip()[:80] or session.get("title") or req.symbol
+        session["symbol"] = req.symbol
+        session["timeframe"] = req.timeframe
+        await save_session(session)
+        await append_session_event(
+            session_id,
+            "message",
+            {"role": "assistant", "text": rec.rationale, "recommendationId": rec.id},
+        )
 
     await emit(
         "run_complete",
-        {"runId": run_id, "engine": engine, "recommendationId": rec.id if rec else None},
+        {
+            "runId": run_id,
+            "sessionId": session_id,
+            "engine": "multi-agent-crew",
+            "recommendationId": rec.id if rec else None,
+        },
     )
-    return {"runId": run_id, "engine": engine, "recommendation": rec.model_dump(mode="json") if rec else None}
+    return {
+        "runId": run_id,
+        "sessionId": session_id,
+        "engine": "multi-agent-crew",
+        "recommendation": rec.model_dump(mode="json") if rec else None,
+    }

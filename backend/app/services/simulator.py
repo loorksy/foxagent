@@ -117,14 +117,19 @@ def generate_candles(
             high = max(high, close_px)
             low = min(low, open_px)
         volume = abs(rng.gauss(1800, 420)) * sess
+        decimals = spec["decimals"]
+        open_r = round(open_px, decimals)
+        close_r = round(close_px, decimals)
+        high_r = round(max(high, open_px, close_px), decimals)
+        low_r = round(min(low, open_px, close_px), decimals)
         candles.append(
             OHLCV(
                 time=dt,
                 timestamp=ts * 1000,
-                open=round(open_px, spec["decimals"]),
-                high=round(high, spec["decimals"]),
-                low=round(low, spec["decimals"]),
-                close=round(close_px, spec["decimals"]),
+                open=open_r,
+                high=high_r,
+                low=low_r,
+                close=close_r,
                 volume=round(volume, 1),
                 complete=i < count - 1,
             )

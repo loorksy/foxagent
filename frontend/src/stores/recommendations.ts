@@ -53,7 +53,14 @@ export const useRecommendations = create<RecState>((set) => ({
         else if (mid < entryPrice) status = "IN_PROFIT";
         const risk = Math.abs(entryPrice - stopLoss) || 1;
         const pnlR = (buy ? mid - entryPrice : entryPrice - mid) / risk;
-        return { ...rec, status, pnlPips: pnlR, pnlPercent: pnlR * 100 };
+        const next = { ...rec, status, pnlPips: pnlR, pnlPercent: pnlR * 100 };
+        if (
+          status !== rec.status &&
+          ["HIT_TP1", "HIT_TP2", "STOPPED_OUT", "EXPIRED"].includes(status)
+        ) {
+          void api.patchRecommendation(rec.id, { status, pnlPips: pnlR, pnlPercent: pnlR * 100 }).catch(() => undefined);
+        }
+        return next;
       }),
     })),
 }));

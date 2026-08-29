@@ -169,6 +169,20 @@ class ChatRequest(BaseModel):
     sessionId: str | None = None
 
 
+class SessionCreate(BaseModel):
+    id: str | None = None
+    symbol: str = "XAU_USD"
+    timeframe: str = "15m"
+    title: str = ""
+
+
+class SessionUpdate(BaseModel):
+    title: str | None = None
+    symbol: str | None = None
+    timeframe: str | None = None
+    state: dict[str, Any] | None = None
+
+
 class SettingsPayload(BaseModel):
     anthropicApiKey: str = ""
     oandaApiToken: str = ""

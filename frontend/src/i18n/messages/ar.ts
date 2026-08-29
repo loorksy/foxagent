@@ -88,6 +88,22 @@ export const ar = {
   "settings.saved": "تم الحفظ في المخزن المشفّر",
   "locale.ar": "العربية",
   "locale.en": "English",
+  "chats.creating": "جاري فتح الجلسة…",
+  "run.live": "بث مباشر",
+  "run.thoughts": "التفكير",
+  "run.tools": "الأدوات",
+  "run.debate": "النقاش",
+  "run.memory": "الذاكرة",
+  "run.bull": "الثور",
+  "run.bear": "الدب",
+  "artifacts.title": "المخرجات",
+  "artifacts.empty": "لا توجد مخرجات بعد. تظهر التقارير والمخططات هنا أثناء التشغيل.",
+  "artifacts.copy": "نسخ",
+  "artifacts.copied": "تم النسخ",
+  "artifacts.export": "تصدير",
+  "artifacts.close": "إغلاق المخرجات",
+  "artifacts.open": "المخرجات",
+  "artifacts.preview": "معاينة",
 } as const
 
 export type MessageKey = keyof typeof ar

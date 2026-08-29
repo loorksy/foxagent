@@ -456,6 +456,28 @@ def _build_overlays(
     return overlays
 
 
+def calculate_ict_levels(candles: list[OHLCV]) -> dict:
+    """Rich ICT map used by TechnicalAgent (FVGs, OBs, session liquidity, swings)."""
+    report = analyze_structure(candles)
+    summary = structure_summary(report)
+    summary["orderBlockZones"] = [
+        {
+            "direction": block.direction,
+            "low": block.low,
+            "high": block.high,
+            "timestamp": block.timestamp,
+        }
+        for block in report.order_blocks[-6:]
+    ]
+    if report.fib_swing:
+        left, right = report.fib_swing
+        summary["fibonacciSwing"] = {
+            "from": {"timestamp": left.timestamp, "price": left.price, "kind": left.kind},
+            "to": {"timestamp": right.timestamp, "price": right.price, "kind": right.kind},
+        }
+    return summary
+
+
 def structure_summary(report: StructureReport) -> dict:
     return {
         "bias": report.bias,

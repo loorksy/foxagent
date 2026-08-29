@@ -1,7 +1,5 @@
-"use client";
-
-import { Workstation } from "@/components/Workstation";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return <Workstation />;
+  redirect("/agents");
 }

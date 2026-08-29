@@ -1,4 +1,4 @@
-import type { KLineBar, SettingsPayload, SettingsPublic, TradeRecommendation } from "./types";
+import type { AgentSession, KLineBar, SettingsPayload, SettingsPublic, TradeRecommendation } from "./types";
 
 const API = "";
 
@@ -37,8 +37,17 @@ export const api = {
   validateSettings: (body: Record<string, unknown>) =>
     http<{ ok: boolean; detail: string; keyValid?: boolean }>("/api/settings/validate", { method: "POST", body: JSON.stringify(body) }),
   prices: () => http<{ prices: import("./types").LivePrice[] }>("/api/prices"),
+  sessions: () => http<{ sessions: AgentSession[] }>("/api/sessions"),
+  createSession: (body?: { id?: string; symbol?: string; timeframe?: string; title?: string }) =>
+    http<AgentSession>("/api/sessions", { method: "POST", body: JSON.stringify(body || {}) }),
+  getSession: (id: string) => http<AgentSession>(`/api/sessions/${id}`),
+  saveSession: (id: string, body: Partial<AgentSession>) =>
+    http<AgentSession>(`/api/sessions/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteSession: (id: string) => http<{ ok: boolean }>(`/api/sessions/${id}`, { method: "DELETE" }),
+  patchRecommendation: (id: string, patch: Record<string, unknown>) =>
+    http<TradeRecommendation>(`/api/recommendations/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   streamChat: async (
-    body: { message: string; symbol: string; timeframe: string; model: string },
+    body: { message: string; symbol: string; timeframe: string; model: string; sessionId?: string },
     onEvent: (event: { type: string; payload: Record<string, unknown> }) => void
   ) => {
     const res = await fetch("/api/agent/chat/stream", {

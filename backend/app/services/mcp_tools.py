@@ -3,11 +3,15 @@ from __future__ import annotations
 import json
 from typing import Any, Callable, Awaitable
 
-from app.services.analysis import analyze_structure, structure_summary
+from app.services.analysis import analyze_structure, calculate_ict_levels, structure_summary
 from app.services.chart_capture import render_candles_b64
+from app.services.macro_feed import fetch_financial_news, get_economic_calendar, get_market_sentiment
+from app.services.memory_log import get_past_context
 from app.services.oanda import oanda
 from app.db import save_recommendation
 from app.schemas import KlineOverlay, TradeRecommendation
+from app.services.reflection import write_reflection
+from app.services.risk_rules import validate_risk_rules
 from app.services.telegram_service import schedule_trade_alert
 
 Emit = Callable[[str, dict[str, Any]], Awaitable[None]]
@@ -45,13 +49,39 @@ async def tool_structure_scan(instrument: str, granularity: str, count: int = 30
     return structure_summary(report)
 
 
-async def tool_send_recommendation(payload: dict[str, Any], emit: Emit | None = None) -> bool:
+async def tool_calculate_ict_levels(instrument: str, granularity: str, count: int = 300) -> dict[str, Any]:
+    candles = await oanda.get_candles(instrument, granularity, count)
+    return calculate_ict_levels(candles)
+
+
+async def tool_query_technical_memory(instrument: str, query: str = "") -> dict[str, Any]:
+    text = await get_past_context(instrument, query=query or f"{instrument} ICT FVG order block")
+    return {"kind": "technical", "instrument": instrument, "context": text}
+
+
+async def tool_query_macro_memory(instrument: str, query: str = "") -> dict[str, Any]:
+    text = await get_past_context(instrument, query=query or f"{instrument} session calendar sentiment")
+    return {"kind": "macro", "instrument": instrument, "context": text}
+
+
+async def tool_record_post_trade_reflection(
+    recommendation_id: str,
+    outcome: str,
+    pnl: float = 0.0,
+) -> dict[str, Any]:
+    result = await write_reflection(recommendation_id, outcome, pnl)
+    return result or {"ok": False, "detail": "No pending memory entry for this recommendation"}
+
+
+async def tool_send_recommendation(payload: dict[str, Any], emit: Emit | None = None) -> dict[str, Any]:
     rec = TradeRecommendation.model_validate(payload)
     await save_recommendation(rec)
     schedule_trade_alert(rec)
+    dumped = rec.model_dump(mode="json")
     if emit:
-        await emit("recommendation", rec.model_dump(mode="json"))
-    return True
+        await emit("recommendation", dumped)
+        await emit("agent_recommendation", dumped)
+    return {"ok": True, "recommendation": dumped}
 
 
 def mcp_tool_specs() -> list[dict[str, Any]]:
@@ -117,6 +147,95 @@ def mcp_tool_specs() -> list[dict[str, Any]]:
                 "required": ["payload"],
             },
         },
+        {
+            "name": "calculate_ict_levels",
+            "description": "Map FVGs, order blocks, session liquidity, swings, and Fibonacci of the last ICT structure scan.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "instrument": {"type": "string"},
+                    "granularity": {"type": "string"},
+                    "count": {"type": "integer"},
+                },
+                "required": ["instrument", "granularity"],
+            },
+        },
+        {
+            "name": "query_technical_memory",
+            "description": "Recall past technical decisions and post-trade lessons for this instrument.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "instrument": {"type": "string"},
+                    "query": {"type": "string"},
+                },
+                "required": ["instrument"],
+            },
+        },
+        {
+            "name": "get_economic_calendar",
+            "description": "UTC session clock and calendar windows. Does not invent economic prints.",
+            "input_schema": {
+                "type": "object",
+                "properties": {"instrument": {"type": "string"}},
+            },
+        },
+        {
+            "name": "get_market_sentiment",
+            "description": "Live mid/spread plus algorithmic HTF bias and liquidity sweep from OANDA candles.",
+            "input_schema": {
+                "type": "object",
+                "properties": {"instrument": {"type": "string"}},
+            },
+        },
+        {
+            "name": "fetch_financial_news",
+            "description": "Recent Reuters business headlines. Returns an honest failure if the feed is down.",
+            "input_schema": {
+                "type": "object",
+                "properties": {"instrument": {"type": "string"}},
+            },
+        },
+        {
+            "name": "query_macro_memory",
+            "description": "Recall past macro / session lessons for this instrument.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "instrument": {"type": "string"},
+                    "query": {"type": "string"},
+                },
+                "required": ["instrument"],
+            },
+        },
+        {
+            "name": "validate_risk_rules",
+            "description": "Check R:R floor, max risk %, and allowed sessions before approving a setup.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "payload": {"type": "object"},
+                    "tradeSetup": {"type": "object"},
+                    "entryPrice": {"type": "number"},
+                    "stopLoss": {"type": "number"},
+                    "riskRewardRatio": {"type": "number"},
+                    "takeProfitLevels": {"type": "array"},
+                },
+            },
+        },
+        {
+            "name": "record_post_trade_reflection",
+            "description": "Write a lesson-learned against a closed recommendation (TP / SL / expire).",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "recommendation_id": {"type": "string"},
+                    "outcome": {"type": "string"},
+                    "pnl": {"type": "number"},
+                },
+                "required": ["recommendation_id", "outcome"],
+            },
+        },
     ]
 
 
@@ -145,6 +264,30 @@ async def dispatch_tool(name: str, args: dict[str, Any], emit: Emit | None = Non
     if name == "send_recommendation":
         payload = args.get("payload") or args
         return await tool_send_recommendation(payload, emit)
+    if name == "calculate_ict_levels":
+        return await tool_calculate_ict_levels(
+            args["instrument"],
+            args["granularity"],
+            int(args.get("count") or 300),
+        )
+    if name == "query_technical_memory":
+        return await tool_query_technical_memory(args["instrument"], args.get("query") or "")
+    if name == "query_macro_memory":
+        return await tool_query_macro_memory(args["instrument"], args.get("query") or "")
+    if name == "get_economic_calendar":
+        return await get_economic_calendar(args.get("instrument") or "XAU_USD")
+    if name == "get_market_sentiment":
+        return await get_market_sentiment(args.get("instrument") or "XAU_USD")
+    if name == "fetch_financial_news":
+        return await fetch_financial_news(args.get("instrument") or "XAU_USD")
+    if name == "validate_risk_rules":
+        return await validate_risk_rules(args.get("payload") or args)
+    if name == "record_post_trade_reflection":
+        return await tool_record_post_trade_reflection(
+            args["recommendation_id"],
+            args["outcome"],
+            float(args.get("pnl") or 0.0),
+        )
     raise ValueError(f"Unknown tool: {name}")
 
 
@@ -203,8 +346,60 @@ def try_build_sdk_server():
 
     @tool("send_recommendation", "Save a trade recommendation overlay payload.", {"payload": dict})
     async def send_recommendation(args: dict[str, Any]) -> dict[str, Any]:
-        ok = await tool_send_recommendation(args.get("payload") or args)
-        return {"content": [{"type": "text", "text": json.dumps({"ok": ok})}]}
+        data = await tool_send_recommendation(args.get("payload") or args)
+        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
+
+    @tool(
+        "calculate_ict_levels",
+        "Map FVGs, order blocks, session liquidity.",
+        {"instrument": str, "granularity": str, "count": int},
+    )
+    async def calculate_ict_levels_tool(args: dict[str, Any]) -> dict[str, Any]:
+        data = await tool_calculate_ict_levels(
+            args["instrument"], args["granularity"], int(args.get("count") or 300)
+        )
+        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
+
+    @tool("query_technical_memory", "Recall technical lessons.", {"instrument": str, "query": str})
+    async def query_technical_memory(args: dict[str, Any]) -> dict[str, Any]:
+        data = await tool_query_technical_memory(args["instrument"], args.get("query") or "")
+        return {"content": [{"type": "text", "text": json.dumps(data)}]}
+
+    @tool("get_economic_calendar", "UTC session clock.", {"instrument": str})
+    async def economic_calendar(args: dict[str, Any]) -> dict[str, Any]:
+        data = await get_economic_calendar(args.get("instrument") or "XAU_USD")
+        return {"content": [{"type": "text", "text": json.dumps(data)}]}
+
+    @tool("get_market_sentiment", "Live bias and session.", {"instrument": str})
+    async def market_sentiment(args: dict[str, Any]) -> dict[str, Any]:
+        data = await get_market_sentiment(args.get("instrument") or "XAU_USD")
+        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
+
+    @tool("fetch_financial_news", "Reuters business headlines.", {"instrument": str})
+    async def financial_news(args: dict[str, Any]) -> dict[str, Any]:
+        data = await fetch_financial_news(args.get("instrument") or "XAU_USD")
+        return {"content": [{"type": "text", "text": json.dumps(data)}]}
+
+    @tool("query_macro_memory", "Recall macro lessons.", {"instrument": str, "query": str})
+    async def query_macro_memory(args: dict[str, Any]) -> dict[str, Any]:
+        data = await tool_query_macro_memory(args["instrument"], args.get("query") or "")
+        return {"content": [{"type": "text", "text": json.dumps(data)}]}
+
+    @tool("validate_risk_rules", "Enforce R:R and session gates.", {"payload": dict})
+    async def validate_risk(args: dict[str, Any]) -> dict[str, Any]:
+        data = await validate_risk_rules(args.get("payload") or args)
+        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
+
+    @tool(
+        "record_post_trade_reflection",
+        "Write a lesson after TP/SL/expire.",
+        {"recommendation_id": str, "outcome": str, "pnl": float},
+    )
+    async def record_reflection(args: dict[str, Any]) -> dict[str, Any]:
+        data = await tool_record_post_trade_reflection(
+            args["recommendation_id"], args["outcome"], float(args.get("pnl") or 0.0)
+        )
+        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
 
     return create_sdk_mcp_server(
         name="oanda",
@@ -215,5 +410,13 @@ def try_build_sdk_server():
             capture_chart_screenshot,
             structure_scan,
             send_recommendation,
+            calculate_ict_levels_tool,
+            query_technical_memory,
+            economic_calendar,
+            market_sentiment,
+            financial_news,
+            query_macro_memory,
+            validate_risk,
+            record_reflection,
         ],
     )

@@ -1,6 +1,8 @@
 "use client";
 
-import { CandlestickChart, PanelLeft, RefreshCw, Settings } from "lucide-react";
+import { CandlestickChart, FileStack, PanelLeft, RefreshCw, Settings } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useUi } from "@/stores/ui";
 import { useWorkspace } from "@/stores/workspace";
@@ -15,8 +17,10 @@ const ICON =
 export function TopBar() {
   const mobileOpen = useUi((s) => s.mobileOpen);
   const setMobileOpen = useUi((s) => s.setMobileOpen);
-  const setSection = useUi((s) => s.setSection);
-  const section = useUi((s) => s.section);
+  const pathname = usePathname() || "/";
+  const section = pathname.startsWith("/settings") ? "settings" : pathname.startsWith("/recommendations") ? "recommendations" : "chat";
+  const artifactsOpen = useChat((s) => s.artifactsOpen);
+  const setArtifactsOpen = useChat((s) => s.setArtifactsOpen);
   const toggleChart = useWorkspace((s) => s.toggleChart);
   const chartOpen = useWorkspace((s) => s.chartOpen);
   const symbol = useWorkspace((s) => s.symbol);
@@ -61,6 +65,17 @@ export function TopBar() {
             <CandlestickChart className="h-5 w-5" />
           </button>
         )}
+        {section === "chat" && (
+          <button
+            type="button"
+            onClick={() => setArtifactsOpen(!artifactsOpen)}
+            className={cn(ICON, artifactsOpen && "bg-muted text-foreground")}
+            aria-label={t("artifacts.open")}
+            title={t("artifacts.title")}
+          >
+            <FileStack className="h-5 w-5" />
+          </button>
+        )}
         <button
           type="button"
           onClick={() => {
@@ -73,9 +88,9 @@ export function TopBar() {
         >
           <RefreshCw className={cn("h-5 w-5", spinning && "animate-spin")} />
         </button>
-        <button type="button" onClick={() => setSection("settings")} className={ICON} aria-label={t("topbar.settings")}>
+        <Link href="/settings" className={ICON} aria-label={t("topbar.settings")}>
           <Settings className="h-5 w-5" />
-        </button>
+        </Link>
       </div>
     </div>
   );

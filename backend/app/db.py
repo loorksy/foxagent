@@ -45,6 +45,10 @@ _memory_settings: dict[str, str] = {}
 
 async def init_db() -> None:
     global engine, SessionLocal
+    # Register extra tables on Base before create_all.
+    from app.services import memory_log as _memory_log  # noqa: F401
+    from app.services import session_store as _session_store  # noqa: F401
+
     settings = get_settings()
     try:
         engine = create_async_engine(settings.database_url, echo=False, future=True)

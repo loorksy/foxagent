@@ -1,49 +1,104 @@
 "use client";
 
-import { Check, ChevronDown, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { ChevronDown, Loader2 } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useChat } from "@/stores/chat";
 import { cn } from "@/lib/utils";
-import { phaseNameKey, useT } from "@/i18n";
+import { useT } from "@/i18n";
 
 export function ChatThinking() {
-  const phases = useChat((s) => s.phases);
   const thoughts = useChat((s) => s.thoughts);
-  const [open, setOpen] = useState(false);
-  const active = phases.find((p) => p.status === "active");
+  const tools = useChat((s) => s.tools);
+  const debate = useChat((s) => s.debate);
+  const recalls = useChat((s) => s.recalls);
+  const streaming = useChat((s) => s.streaming);
+  const [open, setOpen] = useState(true);
   const t = useT();
+
+  const latest = useMemo(() => {
+    const last = [...thoughts].reverse().find((item) => item.text.trim());
+    return last ? last.text.trim().slice(-180) : "";
+  }, [thoughts]);
+  const agent = thoughts[thoughts.length - 1]?.agent || "";
 
   return (
     <div className="mb-2">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex min-h-9 items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+        className="flex min-h-9 w-full items-start gap-1.5 text-start text-xs font-medium text-muted-foreground hover:text-foreground"
       >
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        <span>{active ? t(phaseNameKey(active.id)) : t("chat.thinking")}</span>
-        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+        {streaming ? <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" /> : null}
+        <span className="min-w-0 flex-1 whitespace-pre-wrap font-mono text-[12px] leading-5">
+          {latest || (agent ? agent : t("run.live"))}
+        </span>
+        <ChevronDown className={cn("mt-0.5 h-3.5 w-3.5 shrink-0 transition-transform", open && "rotate-180")} />
       </button>
       {open && (
-        <ol className="mt-2 space-y-1.5 rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
-          {phases.map((p) => (
-            <li key={p.id} className="flex items-start gap-2 text-[12px]">
-              {p.status === "complete" ? (
-                <Check className="mt-0.5 h-3.5 w-3.5 text-buy" />
-              ) : p.status === "active" ? (
-                <Loader2 className="mt-0.5 h-3.5 w-3.5 animate-spin text-warning" />
-              ) : (
-                <span className="mt-1.5 size-1.5 rounded-full bg-muted-foreground/40" />
-              )}
-              <span className={p.status === "pending" ? "text-muted-foreground" : "text-foreground"}>{t(phaseNameKey(p.id))}</span>
-            </li>
-          ))}
-          {thoughts.slice(-4).map((t, i) => (
-            <li key={i} className="ps-6 font-mono text-[11px] text-muted-foreground">
-              {t}
-            </li>
-          ))}
-        </ol>
+        <div className="mt-2 space-y-3 rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
+          {recalls.length > 0 && (
+            <section>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{t("run.memory")}</p>
+              {recalls.map((recall, i) => (
+                <pre key={i} className="whitespace-pre-wrap font-mono text-[11px] text-warning">
+                  {recall.text || (recall.lessons || []).join("\n")}
+                </pre>
+              ))}
+            </section>
+          )}
+          {thoughts.length > 0 && (
+            <section>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{t("run.thoughts")}</p>
+              <div className="fox-scroll max-h-48 space-y-2 overflow-y-auto">
+                {thoughts.map((item, i) => (
+                  <p key={`${item.agent}-${i}`} className="whitespace-pre-wrap font-mono text-[11px] leading-5 text-foreground/90">
+                    <span className="text-muted-foreground">{item.agent}: </span>
+                    {item.text.slice(-2000)}
+                  </p>
+                ))}
+              </div>
+            </section>
+          )}
+          {tools.length > 0 && (
+            <section>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{t("run.tools")}</p>
+              <ul className="space-y-1.5">
+                {tools.map((tool) => (
+                  <li key={tool.id || tool.name} className="rounded-md border border-border/40 bg-background/60 p-2 font-mono text-[11px]">
+                    <p className="text-foreground">
+                      {tool.agent} · {tool.name}
+                    </p>
+                    {tool.input != null && (
+                      <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap text-muted-foreground">
+                        {JSON.stringify(tool.input, null, 2).slice(0, 800)}
+                      </pre>
+                    )}
+                    {tool.output != null && (
+                      <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap text-muted-foreground">
+                        {JSON.stringify(tool.output, null, 2).slice(0, 800)}
+                      </pre>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {debate.length > 0 && (
+            <section>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{t("run.debate")}</p>
+              <div className="space-y-2">
+                {debate.map((line, i) => (
+                  <article key={i} className="rounded-md border border-border/40 px-2 py-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      {line.role === "bull" ? t("run.bull") : line.role === "bear" ? t("run.bear") : line.agent}
+                    </p>
+                    <p className="whitespace-pre-wrap text-[12px] leading-5">{line.text}</p>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
       )}
     </div>
   );

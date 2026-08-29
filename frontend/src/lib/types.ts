@@ -97,6 +97,61 @@ export type AgentPhase = {
   status: "pending" | "active" | "complete" | "error";
 };
 
+export type RunThought = {
+  agent: string;
+  text: string;
+  channel?: string;
+};
+
+export type RunTool = {
+  id: string;
+  agent: string;
+  name: string;
+  input?: unknown;
+  output?: unknown;
+};
+
+export type DebateLine = {
+  role: string;
+  agent: string;
+  text: string;
+};
+
+export type Artifact = {
+  id: string;
+  title: string;
+  type: string;
+  agent?: string;
+  body: string;
+  createdAt?: string;
+};
+
+export type MemoryRecall = {
+  instrument?: string;
+  count?: number;
+  text?: string;
+  lessons?: string[];
+};
+
+export type AgentSession = {
+  id: string;
+  title: string;
+  symbol: string;
+  timeframe: string;
+  state: {
+    messages?: ChatMessage[];
+    thoughts?: RunThought[];
+    tools?: RunTool[];
+    debate?: DebateLine[];
+    artifacts?: Artifact[];
+    overlays?: KlineOverlay[];
+    recalls?: MemoryRecall[];
+    recommendationId?: string | null;
+  };
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type LivePrice = {
   instrument: string;
   bid: number;

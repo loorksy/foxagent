@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { CandlestickChart, Check, Copy, Shield, Target, TrendingDown, TrendingUp } from "lucide-react";
 import type { TradeRecommendation } from "@/lib/types";
+import { useRouter } from "next/navigation";
 import { useWorkspace } from "@/stores/workspace";
-import { useUi } from "@/stores/ui";
+import { useSessions } from "@/stores/sessions";
 import { formatPrice } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { displaySymbol } from "@/lib/constants";
@@ -43,7 +44,8 @@ const STATUS_TONE: Record<string, string> = {
 
 export function RecommendationCard({ rec }: { rec: TradeRecommendation }) {
   const applyToChart = useWorkspace((s) => s.applyToChart);
-  const setSection = useUi((s) => s.setSection);
+  const router = useRouter();
+  const activeId = useSessions((s) => s.activeId);
   const t = useT();
   const buy = rec.tradeSetup.action === "BUY";
   const DirIcon = buy ? TrendingUp : TrendingDown;
@@ -64,8 +66,8 @@ export function RecommendationCard({ rec }: { rec: TradeRecommendation }) {
             <button
               type="button"
               onClick={() => {
-                setSection("chat");
                 applyToChart(rec.klineOverlays || [], rec.focusTimestamp, rec.id);
+                if (activeId) router.push(`/agents/${activeId}?app=chart`);
               }}
               className="ms-auto inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-[11px] text-foreground hover:bg-muted"
             >

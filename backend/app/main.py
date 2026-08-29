@@ -28,8 +28,24 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("Could not load runtime settings: %s", exc)
     pump = asyncio.create_task(price_pump())
+    reflector = asyncio.create_task(_reflection_loop())
     yield
     pump.cancel()
+    reflector.cancel()
+
+
+async def _reflection_loop() -> None:
+    from app.services.reflection import scan_closed_recommendations
+
+    await asyncio.sleep(8)
+    while True:
+        try:
+            written = await scan_closed_recommendations()
+            if written:
+                logger.info("Post-trade reflections written: %s", written)
+        except Exception as exc:
+            logger.warning("Reflection scan failed: %s", exc)
+        await asyncio.sleep(45)
 
 
 def create_app() -> FastAPI:
