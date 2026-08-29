@@ -18,7 +18,7 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FoxAgent — شارت حي وتوصيات ICT",
+  title: "FoxAgent — live chart and ICT setups",
   description: "Claude Agent SDK + OANDA + klinecharts ICT desk",
 };
 

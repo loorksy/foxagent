@@ -4,6 +4,7 @@ import { create } from "zustand";
 import type { SettingsPayload, SettingsPublic } from "@/lib/types";
 import { api } from "@/lib/api";
 import { MODELS } from "@/lib/constants";
+import { t } from "@/i18n";
 
 type SettingsState = {
   public: SettingsPublic | null;
@@ -53,7 +54,7 @@ export const useSettings = create<SettingsState>((set, get) => ({
   },
   save: async () => {
     const pub = await api.saveSettings(get().form);
-    set({ public: pub, status: "Saved to encrypted store" });
+    set({ public: pub, status: t("settings.saved") });
   },
   validate: async (target) => {
     const form = get().form;

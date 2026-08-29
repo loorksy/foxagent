@@ -7,6 +7,7 @@ import { useWorkspace } from "@/stores/workspace";
 import { useChat } from "@/stores/chat";
 import { displaySymbol } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { useT } from "@/i18n";
 
 const ICON =
   "flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground";
@@ -25,6 +26,7 @@ export function TopBar() {
   const messages = useChat((s) => s.messages);
   const [spinning, setSpinning] = useState(false);
   const tick = prices[symbol];
+  const t = useT();
 
   return (
     <div className="flex h-14 shrink-0 items-center gap-1 border-b border-border px-2 sm:px-3">
@@ -32,7 +34,7 @@ export function TopBar() {
         type="button"
         onClick={() => setMobileOpen(!mobileOpen)}
         className={cn(ICON, "lg:hidden")}
-        aria-label="القائمة"
+        aria-label={t("topbar.menu")}
       >
         <PanelLeft className="h-5 w-5 rtl:-scale-x-100" />
       </button>
@@ -46,15 +48,15 @@ export function TopBar() {
           </span>
         ) : null}
         <span className="rounded-full border border-border px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-          {dataMode === "oanda" ? "حي" : "محاكي"}
+          {dataMode === "oanda" ? t("topbar.live") : t("topbar.simulator")}
         </span>
         {section === "chat" && messages.length > 0 && (
           <button
             type="button"
             onClick={toggleChart}
             className={cn(ICON, chartOpen && "bg-muted text-foreground")}
-            aria-label="الشارت"
-            title="إظهار الشارت"
+            aria-label={t("topbar.chart")}
+            title={t("topbar.showChart")}
           >
             <CandlestickChart className="h-5 w-5" />
           </button>
@@ -67,11 +69,11 @@ export function TopBar() {
             useWorkspace.setState({ chartNonce: Date.now() });
           }}
           className={ICON}
-          aria-label="تحديث"
+          aria-label={t("topbar.refresh")}
         >
           <RefreshCw className={cn("h-5 w-5", spinning && "animate-spin")} />
         </button>
-        <button type="button" onClick={() => setSection("settings")} className={ICON} aria-label="الإعدادات">
+        <button type="button" onClick={() => setSection("settings")} className={ICON} aria-label={t("topbar.settings")}>
           <Settings className="h-5 w-5" />
         </button>
       </div>

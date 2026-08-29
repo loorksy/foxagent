@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import type { ChatMessage } from "@/lib/types";
 import { uid } from "@/lib/utils";
+import { t } from "@/i18n";
 import { useChat } from "./chat";
 
 export type ChatSession = {
@@ -46,7 +47,7 @@ type SessionsState = {
 
 function titleFrom(messages: ChatMessage[]) {
   const first = messages.find((m) => m.role === "user");
-  return first?.text.trim().slice(0, 42) || "محادثة جديدة";
+  return first?.text.trim().slice(0, 42) || t("chats.untitled");
 }
 
 export const useSessions = create<SessionsState>((set, get) => ({

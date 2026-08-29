@@ -14,6 +14,8 @@ import { useSettings } from "@/stores/settings";
 import { useSessions } from "@/stores/sessions";
 import { useUi } from "@/stores/ui";
 import type { LivePrice } from "@/lib/types";
+import { LocaleSync } from "@/i18n/LocaleSync";
+import { useDir, useT } from "@/i18n";
 
 const ChartCanvas = dynamic(() => import("./ChartCanvas"), { ssr: false });
 
@@ -27,6 +29,8 @@ export function Workstation() {
   const markFromPrice = useRecommendations((s) => s.markFromPrice);
   const loadSettings = useSettings((s) => s.load);
   const hydrateSessions = useSessions((s) => s.hydrate);
+  const dir = useDir();
+  const t = useT();
 
   useEffect(() => {
     hydrateSessions();
@@ -90,7 +94,8 @@ export function Workstation() {
   }, [markFromPrice, setPrice]);
 
   return (
-    <div className="relative flex h-dvh overflow-hidden bg-background lg:flex-row" dir="rtl">
+    <div className="relative flex h-dvh overflow-hidden bg-background lg:flex-row" dir={dir}>
+      <LocaleSync />
       <Sidebar />
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
         <TopBar />
@@ -107,7 +112,7 @@ export function Workstation() {
               )}
               {chartOpen && (
                 <div className="xl:hidden">
-                  <button type="button" className="absolute inset-0 z-30 bg-black/50" aria-label="إغلاق الشارت" onClick={() => setChartOpen(false)} />
+                  <button type="button" className="absolute inset-0 z-30 bg-black/50" aria-label={t("workstation.closeChart")} onClick={() => setChartOpen(false)} />
                   <div className="absolute inset-x-0 bottom-0 z-40 h-[72dvh] overflow-hidden rounded-t-2xl border-t border-border bg-background shadow-xl">
                     <div className="flex h-10 items-center justify-center">
                       <span className="h-1 w-10 rounded-full bg-muted-foreground/40" />

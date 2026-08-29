@@ -5,12 +5,12 @@ import type { AgentPhase, ChatMessage } from "@/lib/types";
 import { MODELS } from "@/lib/constants";
 import { uid } from "@/lib/utils";
 
-const IDLE_PHASES: AgentPhase[] = [
-  { id: 1, name: "جلب شموع الإطار المتعدد", detail: "1D / 4H / 15M", status: "pending" },
-  { id: 2, name: "قراءة الشارت ورسم السيولة", detail: "هيكل ICT", status: "pending" },
-  { id: 3, name: "تحيز الجلسة والتقاء الإشارات", detail: "لندن / نيويورك", status: "pending" },
-  { id: 4, name: "صياغة التوصية ورسم المستويات", detail: "دخول ووقف وأهداف", status: "pending" },
-];
+const IDLE_PHASES: AgentPhase[] = [1, 2, 3, 4].map((id) => ({
+  id,
+  name: "",
+  detail: "",
+  status: "pending" as const,
+}));
 
 type ChatState = {
   messages: ChatMessage[];

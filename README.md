@@ -38,7 +38,7 @@ Or `bash scripts/dev.sh`.
 
 UI: http://localhost:3000 · API: http://localhost:8000/api/health
 
-`GET /api/health` probes Anthropic with a live `messages.create` (cached ~2 minutes) and reports `anthropicReady` / `anthropicDetail`. Settings → «التحقق من المفتاح» uses the stored key when the form field is empty.
+`GET /api/health` probes Anthropic with a live `messages.create` (cached ~2 minutes) and reports `anthropicReady` / `anthropicDetail`. Settings → Verify key uses the stored key when the form field is empty. UI copy lives in `frontend/src/i18n/messages/` (register another locale in `frontend/src/i18n/index.ts`).
 
 Optional Postgres + Redis:
 
@@ -53,7 +53,7 @@ docker compose up -d
 - Chat-first RTL console with chart side pane / mobile sheet
 - Slash commands (`/scan`, `/timeframe 15m`, `/model sonnet`, `/pair xauusd`, `/overlay clear`)
 - klinecharts canvas with live ticks, MA / VOL / MACD, ICT overlays (`rect`, `trendLine`, `fibonacci`, `priceLine`, `textAnnotation`)
-- **عرض على الشارت** recenters at `focusTimestamp` and draws the setup
+- Show on chart recenters at `focusTimestamp` and draws the setup
 - Recommendations page with R:R, entry / SL / TP, confluence, status
 - Settings for Anthropic + OANDA + Telegram secrets (Fernet-encrypted at rest) and risk rules
 - Telegram dispatcher: when a setup is saved, a background task sends an HTML alert plus an overlay chart snapshot. Disabled or missing secrets fail closed.

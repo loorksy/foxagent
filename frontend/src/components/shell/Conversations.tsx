@@ -4,10 +4,11 @@ import { MessageSquare, MessageSquarePlus, Search, Trash2 } from "lucide-react";
 import { useSessions } from "@/stores/sessions";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
+import { useLocale, useT } from "@/i18n";
 
-function stamp(ts: number) {
+function stamp(ts: number, locale: string) {
   try {
-    return new Date(ts).toLocaleString("ar", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    return new Date(ts).toLocaleString(locale, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   } catch {
     return "";
   }
@@ -22,6 +23,8 @@ export function Conversations({ collapsed = false }: { collapsed?: boolean }) {
   const openChat = useSessions((s) => s.openChat);
   const removeChat = useSessions((s) => s.removeChat);
   const setSection = useUi((s) => s.setSection);
+  const t = useT();
+  const locale = useLocale((s) => s.locale);
 
   const filtered = sessions.filter(
     (s) => !query.trim() || s.title.toLowerCase().includes(query.trim().toLowerCase())
@@ -36,7 +39,7 @@ export function Conversations({ collapsed = false }: { collapsed?: boolean }) {
             newChat();
             setSection("chat");
           }}
-          title="محادثة جديدة"
+          title={t("chats.new")}
           className="flex size-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           <MessageSquarePlus className="h-4 w-4" />
@@ -57,22 +60,22 @@ export function Conversations({ collapsed = false }: { collapsed?: boolean }) {
           className="flex min-h-9 w-full items-center gap-2 rounded-lg border border-border bg-card px-3 text-xs font-medium text-foreground hover:bg-muted"
         >
           <MessageSquarePlus className="h-4 w-4 shrink-0" />
-          محادثة جديدة
+          {t("chats.new")}
         </button>
         <label className="relative block">
           <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="بحث في المحادثات"
+            placeholder={t("chats.search")}
             className="min-h-9 w-full rounded-lg border border-border bg-background pe-2 ps-8 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         </label>
-        <p className="px-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">المحادثات</p>
+        <p className="px-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{t("chats.list")}</p>
       </div>
       <div className="fox-scroll min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
         {filtered.length === 0 ? (
-          <p className="px-2 py-3 text-xs text-muted-foreground">لا توجد محادثات بعد</p>
+          <p className="px-2 py-3 text-xs text-muted-foreground">{t("chats.empty")}</p>
         ) : (
           filtered.map((s) => (
             <div
@@ -95,14 +98,14 @@ export function Conversations({ collapsed = false }: { collapsed?: boolean }) {
                   {s.title}
                 </p>
                 <p className="mt-0.5 font-mono text-[10px] text-muted-foreground" dir="ltr">
-                  {stamp(s.updatedAt)}
+                  {stamp(s.updatedAt, locale)}
                 </p>
               </button>
               <button
                 type="button"
                 onClick={() => removeChat(s.id)}
                 className="hidden size-7 items-center justify-center rounded-md text-muted-foreground hover:text-sell group-hover:flex"
-                aria-label="حذف"
+                aria-label={t("chats.delete")}
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>

@@ -8,9 +8,11 @@ import { useUi } from "@/stores/ui";
 import { formatPrice } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { displaySymbol } from "@/lib/constants";
+import { recStatusKey, useT } from "@/i18n";
 
 function CopyPrice({ value }: { value: number }) {
   const [copied, setCopied] = useState(false);
+  const t = useT();
   return (
     <button
       type="button"
@@ -21,29 +23,31 @@ function CopyPrice({ value }: { value: number }) {
         });
       }}
       className="relative inline-flex size-4 items-center justify-center text-muted-foreground after:absolute after:-inset-3 hover:text-foreground"
-      aria-label="نسخ"
+      aria-label={t("rec.copy")}
     >
       {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
     </button>
   );
 }
 
-const STATUS: Record<string, { label: string; tone: string }> = {
-  PENDING: { label: "بانتظار التفعيل", tone: "border-warning/40 bg-warning/10 text-warning" },
-  IN_PROFIT: { label: "في الربح", tone: "border-buy/45 bg-buy/10 text-buy" },
-  HIT_TP1: { label: "تحقق TP1", tone: "border-buy/45 bg-buy/10 text-buy" },
-  HIT_TP2: { label: "تحقق TP2", tone: "border-success/45 bg-success/10 text-success" },
-  STOPPED_OUT: { label: "وقف الخسارة", tone: "border-sell/40 bg-sell/10 text-sell" },
-  CANCELLED: { label: "ملغاة", tone: "border-border bg-muted/40 text-muted-foreground" },
-  EXPIRED: { label: "منتهية", tone: "border-border bg-muted/40 text-muted-foreground" },
+const STATUS_TONE: Record<string, string> = {
+  PENDING: "border-warning/40 bg-warning/10 text-warning",
+  ACTIVE: "border-info/40 bg-info/10 text-info",
+  IN_PROFIT: "border-buy/45 bg-buy/10 text-buy",
+  HIT_TP1: "border-buy/45 bg-buy/10 text-buy",
+  HIT_TP2: "border-success/45 bg-success/10 text-success",
+  STOPPED_OUT: "border-sell/40 bg-sell/10 text-sell",
+  CANCELLED: "border-border bg-muted/40 text-muted-foreground",
+  EXPIRED: "border-border bg-muted/40 text-muted-foreground",
 };
 
 export function RecommendationCard({ rec }: { rec: TradeRecommendation }) {
   const applyToChart = useWorkspace((s) => s.applyToChart);
   const setSection = useUi((s) => s.setSection);
+  const t = useT();
   const buy = rec.tradeSetup.action === "BUY";
   const DirIcon = buy ? TrendingUp : TrendingDown;
-  const pill = STATUS[rec.status] || STATUS.PENDING;
+  const pillTone = STATUS_TONE[rec.status] || STATUS_TONE.PENDING;
   const { entryPrice, stopLoss, takeProfitLevels, riskRewardRatio } = rec.tradeSetup;
 
   return (
@@ -66,30 +70,30 @@ export function RecommendationCard({ rec }: { rec: TradeRecommendation }) {
               className="ms-auto inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-[11px] text-foreground hover:bg-muted"
             >
               <CandlestickChart className="h-3 w-3" />
-              عرض على الشارت
+              {t("rec.showOnChart")}
             </button>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className={cn("text-[11px] font-semibold uppercase tracking-wider", buy ? "text-buy" : "text-sell")}>
-                {buy ? "شراء" : "بيع"}
+                {buy ? t("rec.buy") : t("rec.sell")}
               </p>
               <p className={cn("mt-0.5 flex items-center gap-2 font-mono text-xl font-extrabold", buy ? "text-buy" : "text-sell")} dir="ltr">
                 {displaySymbol(rec.symbol)}
                 <DirIcon className="h-5 w-5" />
               </p>
             </div>
-            <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold", pill.tone)}>
-              {pill.label}
+            <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold", pillTone)}>
+              {t(recStatusKey(rec.status))}
             </span>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-x-3 gap-y-3 p-3 sm:grid-cols-3">
-          <Level label="الدخول" value={entryPrice} tone="text-foreground" />
-          <Level label="وقف الخسارة" value={stopLoss} tone="text-sell" icon="sl" />
+          <Level label={t("rec.entry")} value={entryPrice} tone="text-foreground" />
+          <Level label={t("rec.stopLoss")} value={stopLoss} tone="text-sell" icon="sl" />
           {takeProfitLevels.slice(0, 3).map((tp) => (
-            <Level key={tp.level} label={`الهدف ${tp.level}`} value={tp.price} tone="text-buy" icon="tp" />
+            <Level key={tp.level} label={t("rec.target", { n: tp.level })} value={tp.price} tone="text-buy" icon="tp" />
           ))}
         </div>
 

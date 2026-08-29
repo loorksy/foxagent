@@ -4,6 +4,7 @@ import { useWorkspace } from "@/stores/workspace";
 import { useChat } from "@/stores/chat";
 import { useRecommendations } from "@/stores/recommendations";
 import type { TradeRecommendation } from "@/lib/types";
+import { t } from "@/i18n";
 
 export async function sendAgentMessage(raw: string) {
   const text = raw.trim();
@@ -66,7 +67,7 @@ export async function sendAgentMessage(raw: string) {
       }
     );
   } catch (err) {
-    useChat.getState().appendAssistant(err instanceof Error ? err.message : "فشل طلب الوكيل");
+    useChat.getState().appendAssistant(err instanceof Error ? err.message : t("chat.agentFailed"));
   } finally {
     useChat.getState().complete();
   }

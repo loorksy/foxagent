@@ -30,18 +30,18 @@ export const MODELS: ModelOption[] = [
 ];
 
 export const QUICK_PROMPTS = [
-  { label: "تحليل سيولة 15د", prompt: "Analyze 15m liquidity pools, session highs/lows, and any sweep. Map FVG and give a setup if R:R >= 1:2." },
-  { label: "مسح فجوات FVG", prompt: "/scan Focus on unfilled fair value gaps aligned with HTF bias. Overlay zones." },
-  { label: "إنشاء إعداد", prompt: "Generate a complete ICT trade setup with entry, SL, TP1, TP2 and klineOverlays for the current pair." },
+  { id: "liquidity15m" as const, prompt: "Analyze 15m liquidity pools, session highs/lows, and any sweep. Map FVG and give a setup if R:R >= 1:2." },
+  { id: "fvgScan" as const, prompt: "/scan Focus on unfilled fair value gaps aligned with HTF bias. Overlay zones." },
+  { id: "setup" as const, prompt: "Generate a complete ICT trade setup with entry, SL, TP1, TP2 and klineOverlays for the current pair." },
 ];
 
 export const SLASH_COMMANDS = [
-  { cmd: "/scan", hint: "مسح سيولة وإف في جي" },
-  { cmd: "/timeframe", hint: "/timeframe 15m" },
-  { cmd: "/model", hint: "/model sonnet | haiku | opus" },
-  { cmd: "/pair", hint: "/pair xauusd" },
-  { cmd: "/overlay", hint: "/overlay clear" },
-  { cmd: "/setup", hint: "إنشاء إعداد كامل" },
+  { cmd: "/scan", hintKey: "slash.scan" as const },
+  { cmd: "/timeframe", hintKey: "slash.timeframe" as const },
+  { cmd: "/model", hintKey: "slash.model" as const },
+  { cmd: "/pair", hintKey: "slash.pair" as const },
+  { cmd: "/overlay", hintKey: "slash.overlay" as const },
+  { cmd: "/setup", hintKey: "slash.setup" as const },
 ];
 
 export function displaySymbol(ticker: string) {

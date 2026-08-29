@@ -5,24 +5,27 @@ import { FoxLogo } from "./FoxLogo";
 import { Conversations } from "./Conversations";
 import { useUi, type UiSection } from "@/stores/ui";
 import { cn } from "@/lib/utils";
+import { useT, type MessageKey } from "@/i18n";
 
 const FOCUS =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1";
 
-const NAV: { id: UiSection; label: string; icon: typeof MessageSquareText }[] = [
-  { id: "chat", label: "المحادثة", icon: MessageSquareText },
-  { id: "recommendations", label: "التوصيات", icon: LineChart },
-  { id: "settings", label: "الإعدادات", icon: Settings },
+const NAV: { id: UiSection; labelKey: MessageKey; icon: typeof MessageSquareText }[] = [
+  { id: "chat", labelKey: "nav.chat", icon: MessageSquareText },
+  { id: "recommendations", labelKey: "nav.recommendations", icon: LineChart },
+  { id: "settings", labelKey: "nav.settings", icon: Settings },
 ];
 
 function NavList({ iconOnly, onNavigate }: { iconOnly: boolean; onNavigate?: () => void }) {
   const section = useUi((s) => s.section);
   const setSection = useUi((s) => s.setSection);
+  const t = useT();
   return (
-    <nav className="flex shrink-0 flex-col gap-0.5 px-2 py-2" aria-label="التنقل">
+    <nav className="flex shrink-0 flex-col gap-0.5 px-2 py-2" aria-label={t("nav.aria")}>
       {NAV.map((item) => {
         const Icon = item.icon;
         const active = section === item.id;
+        const label = t(item.labelKey);
         return (
           <button
             key={item.id}
@@ -31,7 +34,7 @@ function NavList({ iconOnly, onNavigate }: { iconOnly: boolean; onNavigate?: () 
               setSection(item.id);
               onNavigate?.();
             }}
-            title={iconOnly ? item.label : undefined}
+            title={iconOnly ? label : undefined}
             className={cn(
               "relative flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors lg:min-h-10",
               FOCUS,
@@ -41,7 +44,7 @@ function NavList({ iconOnly, onNavigate }: { iconOnly: boolean; onNavigate?: () 
           >
             {active && <span className="absolute inset-y-2 start-0 w-0.5 rounded-full bg-foreground" />}
             <Icon className={cn("shrink-0", iconOnly ? "h-5 w-5" : "h-4 w-4")} />
-            {!iconOnly && <span className="truncate">{item.label}</span>}
+            {!iconOnly && <span className="truncate">{label}</span>}
           </button>
         );
       })}
@@ -54,6 +57,7 @@ export function Sidebar() {
   const setCollapsed = useUi((s) => s.setSidebarCollapsed);
   const mobileOpen = useUi((s) => s.mobileOpen);
   const setMobileOpen = useUi((s) => s.setMobileOpen);
+  const t = useT();
 
   const header = (
     <div className={cn("flex h-14 shrink-0 items-center border-b border-sidebar-border px-3", collapsed ? "justify-center" : "justify-between gap-2")}>
@@ -66,7 +70,7 @@ export function Sidebar() {
             type="button"
             onClick={() => setCollapsed(true)}
             className={cn("hidden size-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground lg:flex", FOCUS)}
-            aria-label="طي الشريط"
+            aria-label={t("sidebar.collapse")}
           >
             <PanelLeftClose className="h-4 w-4 rtl:-scale-x-100" />
           </button>
@@ -76,7 +80,7 @@ export function Sidebar() {
           type="button"
           onClick={() => setCollapsed(false)}
           className={cn("group relative hidden size-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted lg:flex", FOCUS)}
-          aria-label="توسيع الشريط"
+          aria-label={t("sidebar.expand")}
         >
           <span className="opacity-100 group-hover:opacity-0">
             <FoxLogo size={30} />
@@ -102,7 +106,7 @@ export function Sidebar() {
 
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <button type="button" className="absolute inset-0 bg-black/60" aria-label="إغلاق" onClick={() => setMobileOpen(false)} />
+          <button type="button" className="absolute inset-0 bg-black/60" aria-label={t("sidebar.close")} onClick={() => setMobileOpen(false)} />
           <aside className="absolute inset-y-0 start-0 flex w-[min(86%,17.5rem)] flex-col border-e border-sidebar-border bg-sidebar shadow-xl">
             <div className="flex h-14 shrink-0 items-center justify-between border-b border-sidebar-border px-3">
               <FoxLogo size={32} showName nameClassName="truncate text-[15px] font-semibold" />

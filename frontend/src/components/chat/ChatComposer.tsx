@@ -7,6 +7,7 @@ import { sendAgentMessage } from "@/lib/agentSend";
 import { useChat } from "@/stores/chat";
 import { useWorkspace } from "@/stores/workspace";
 import { cn } from "@/lib/utils";
+import { useT, type MessageKey } from "@/i18n";
 
 export function ChatComposer({ hero = false }: { hero?: boolean }) {
   const [value, setValue] = useState("");
@@ -18,6 +19,7 @@ export function ChatComposer({ hero = false }: { hero?: boolean }) {
   const setSymbol = useWorkspace((s) => s.setSymbol);
   const period = useWorkspace((s) => s.period);
   const setTimeframe = useWorkspace((s) => s.setTimeframe);
+  const t = useT();
   const slashOpen = value.startsWith("/");
   const slashQuery = value.slice(1).toLowerCase();
   const filteredSlash = useMemo(
@@ -45,13 +47,13 @@ export function ChatComposer({ hero = false }: { hero?: boolean }) {
         <div className="mb-3 flex flex-wrap justify-center gap-1.5">
           {QUICK_PROMPTS.map((q) => (
             <button
-              key={q.label}
+              key={q.id}
               type="button"
               disabled={streaming}
               onClick={() => void sendAgentMessage(q.prompt)}
               className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-50"
             >
-              {q.label}
+              {t(`quick.${q.id}` as MessageKey)}
             </button>
           ))}
         </div>
@@ -67,7 +69,7 @@ export function ChatComposer({ hero = false }: { hero?: boolean }) {
                 className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-muted"
               >
                 <span className="font-mono">{c.cmd}</span>
-                <span className="text-muted-foreground">{c.hint}</span>
+                <span className="text-muted-foreground">{t(c.hintKey)}</span>
               </button>
             ))}
           </div>
@@ -84,7 +86,7 @@ export function ChatComposer({ hero = false }: { hero?: boolean }) {
                 onSubmit();
               }
             }}
-            placeholder="اسأل FoxAgent… أو اكتب /scan"
+            placeholder={t("chat.placeholder")}
             className="max-h-36 min-h-10 w-full resize-none bg-transparent px-2 py-1.5 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground"
           />
           <div className="flex items-center gap-1.5 px-1 pb-0.5">
@@ -129,7 +131,7 @@ export function ChatComposer({ hero = false }: { hero?: boolean }) {
                 "ms-auto flex size-8 items-center justify-center rounded-full disabled:opacity-40",
                 streaming ? "bg-foreground text-background" : "bg-foreground text-background"
               )}
-              aria-label={streaming ? "إيقاف" : "إرسال"}
+              aria-label={streaming ? t("chat.stop") : t("chat.send")}
             >
               {streaming ? <Square className="h-3.5 w-3.5" /> : <ArrowUp className="h-4 w-4" />}
             </button>
@@ -137,7 +139,7 @@ export function ChatComposer({ hero = false }: { hero?: boolean }) {
         </div>
       </form>
       <p className="mt-1.5 px-2 text-center text-[10px] leading-4 text-muted-foreground/60">
-        تحليل وصفي — ليس توصية استثمارية مرخّصة
+        {t("chat.disclaimer")}
       </p>
     </div>
   );

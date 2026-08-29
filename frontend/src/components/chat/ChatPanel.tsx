@@ -8,6 +8,7 @@ import { RecommendationCard } from "./RecommendationCard";
 import { useChat } from "@/stores/chat";
 import { useRecommendations } from "@/stores/recommendations";
 import { useSessions } from "@/stores/sessions";
+import { useT } from "@/i18n";
 
 export function ChatPanel() {
   const messages = useChat((s) => s.messages);
@@ -18,6 +19,7 @@ export function ChatPanel() {
   const dockRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const isHero = messages.length === 0 && !streaming;
+  const t = useT();
 
   useEffect(() => {
     persistActive(messages);
@@ -58,7 +60,7 @@ export function ChatPanel() {
           <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col items-center justify-center gap-6 text-center">
             <AgentAvatar size={44} />
             <h2 className="font-serif text-balance px-4 text-2xl font-medium tracking-tight text-foreground sm:text-3xl">
-              ما الذي تريد قراءته على الشارت؟
+              {t("chat.hero")}
             </h2>
             <div className="w-full">
               <ChatComposer hero />
@@ -98,7 +100,7 @@ export function ChatPanel() {
                           m.recommendationId && m.text.length > 200 ? (
                             <details className="group mt-2 rounded-lg border border-border/50 bg-muted/20">
                               <summary className="flex min-h-9 cursor-pointer list-none items-center px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground">
-                                تفاصيل التحليل
+                                {t("chat.analysisDetails")}
                               </summary>
                               <p className="border-t border-border/40 px-3 py-2 whitespace-pre-wrap leading-relaxed">{m.text}</p>
                             </details>
