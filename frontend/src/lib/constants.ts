@@ -30,18 +30,18 @@ export const MODELS: ModelOption[] = [
 ];
 
 export const QUICK_PROMPTS = [
-  { label: "Analyze 15m Liquidity", prompt: "Analyze 15m liquidity pools, session highs/lows, and any sweep. Map FVG and give a setup if R:R >= 1:2." },
-  { label: "Scan for FVG", prompt: "/scan Focus on unfilled fair value gaps aligned with HTF bias. Overlay zones." },
-  { label: "Generate Setup", prompt: "Generate a complete ICT trade setup with entry, SL, TP1, TP2 and klineOverlays for the current pair." },
+  { label: "تحليل سيولة 15د", prompt: "Analyze 15m liquidity pools, session highs/lows, and any sweep. Map FVG and give a setup if R:R >= 1:2." },
+  { label: "مسح فجوات FVG", prompt: "/scan Focus on unfilled fair value gaps aligned with HTF bias. Overlay zones." },
+  { label: "إنشاء إعداد", prompt: "Generate a complete ICT trade setup with entry, SL, TP1, TP2 and klineOverlays for the current pair." },
 ];
 
 export const SLASH_COMMANDS = [
-  { cmd: "/scan", hint: "Run MTF liquidity + FVG scan" },
+  { cmd: "/scan", hint: "مسح سيولة وإف في جي" },
   { cmd: "/timeframe", hint: "/timeframe 15m" },
   { cmd: "/model", hint: "/model sonnet | haiku | opus" },
   { cmd: "/pair", hint: "/pair xauusd" },
   { cmd: "/overlay", hint: "/overlay clear" },
-  { cmd: "/setup", hint: "Generate a full trade setup" },
+  { cmd: "/setup", hint: "إنشاء إعداد كامل" },
 ];
 
 export function displaySymbol(ticker: string) {

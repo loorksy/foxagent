@@ -46,7 +46,7 @@ export function TopBar() {
           </span>
         ) : null}
         <span className="rounded-full border border-border px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-          {dataMode === "oanda" ? "OANDA" : "محاكي"}
+          {dataMode === "oanda" ? "حي" : "محاكي"}
         </span>
         {section === "chat" && messages.length > 0 && (
           <button

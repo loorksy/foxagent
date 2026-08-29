@@ -55,13 +55,13 @@ export function SettingsPanel() {
   }, [load]);
 
   return (
-    <div className="aichart-scroll mx-auto w-full max-w-xl flex-1 overflow-y-auto px-4 py-6">
+    <div className="fox-scroll mx-auto w-full max-w-xl flex-1 overflow-y-auto px-4 py-6">
       <h1 className="font-serif text-2xl font-medium tracking-tight">الإعدادات</h1>
       <p className="mt-1 text-sm text-muted-foreground">المفاتيح تُشفَّر على الخادم. لا تُعدَّل مشاريع الاستضافة الأخرى من هنا.</p>
 
       <div className="mt-6 space-y-5">
         <section className="space-y-3 rounded-xl border border-border bg-card p-4">
-          <h2 className="text-sm font-semibold">Anthropic</h2>
+          <h2 className="text-sm font-semibold">مفتاح Anthropic</h2>
           <Field
             label="ANTHROPIC_API_KEY"
             secret
@@ -73,7 +73,7 @@ export function SettingsPanel() {
             التحقق من المفتاح
           </button>
           <label className="block space-y-1.5">
-            <span className="text-[11px] font-medium text-muted-foreground">DEFAULT_CLAUDE_MODEL</span>
+            <span className="text-[11px] font-medium text-muted-foreground">نموذج كلود الافتراضي</span>
             <select
               value={form.defaultClaudeModel}
               onChange={(e) => patchForm({ defaultClaudeModel: e.target.value })}

@@ -50,8 +50,8 @@ export function ChatPanel() {
         data-hero={isHero || undefined}
         className={
           isHero
-            ? "chat-scroll-region aichart-scroll flex min-h-0 flex-1 flex-col overflow-y-auto p-3"
-            : "chat-scroll-region aichart-scroll min-h-0 flex-1 overflow-y-auto p-3"
+            ? "chat-scroll-region fox-scroll flex min-h-0 flex-1 flex-col overflow-y-auto p-3"
+            : "chat-scroll-region fox-scroll min-h-0 flex-1 overflow-y-auto p-3"
         }
       >
         {isHero && (

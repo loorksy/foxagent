@@ -95,7 +95,7 @@ export function Workstation() {
       <Sidebar />
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
         <TopBar />
-        <main className="aichart-scroll flex min-h-0 flex-1 flex-col overflow-hidden">
+        <main className="fox-scroll flex min-h-0 flex-1 flex-col overflow-hidden">
           {section === "chat" && (
             <div className="flex min-h-0 flex-1 flex-col xl:flex-row">
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">

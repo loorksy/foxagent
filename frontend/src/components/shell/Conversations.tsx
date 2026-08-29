@@ -70,7 +70,7 @@ export function Conversations({ collapsed = false }: { collapsed?: boolean }) {
         </label>
         <p className="px-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">المحادثات</p>
       </div>
-      <div className="aichart-scroll min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
+      <div className="fox-scroll min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
         {filtered.length === 0 ? (
           <p className="px-2 py-3 text-xs text-muted-foreground">لا توجد محادثات بعد</p>
         ) : (

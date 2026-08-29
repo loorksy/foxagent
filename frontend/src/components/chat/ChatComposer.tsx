@@ -84,7 +84,7 @@ export function ChatComposer({ hero = false }: { hero?: boolean }) {
                 onSubmit();
               }
             }}
-            placeholder="اسأل FoxAgent…  /scan  /pair xauusd"
+            placeholder="اسأل FoxAgent… أو اكتب /scan"
             className="max-h-36 min-h-10 w-full resize-none bg-transparent px-2 py-1.5 text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground"
           />
           <div className="flex items-center gap-1.5 px-1 pb-0.5">

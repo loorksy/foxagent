@@ -6,10 +6,10 @@ import { MODELS } from "@/lib/constants";
 import { uid } from "@/lib/utils";
 
 const IDLE_PHASES: AgentPhase[] = [
-  { id: 1, name: "Fetching OANDA Candles (1D, 4H, 15M)", detail: "Multi-timeframe OHLCV ingest", status: "pending" },
-  { id: 2, name: "Visual Chart Inspection & Liquidity Mapping", detail: "Claude Vision + ICT structure", status: "pending" },
-  { id: 3, name: "Macro & Sentiment Ingestion", detail: "Session liquidity, HTF bias, confluence", status: "pending" },
-  { id: 4, name: "Synthesizing Recommendation & Chart Annotations", detail: "Overlays, entry, SL, TP", status: "pending" },
+  { id: 1, name: "جلب شموع الإطار المتعدد", detail: "1D / 4H / 15M", status: "pending" },
+  { id: 2, name: "قراءة الشارت ورسم السيولة", detail: "هيكل ICT", status: "pending" },
+  { id: 3, name: "تحيز الجلسة والتقاء الإشارات", detail: "لندن / نيويورك", status: "pending" },
+  { id: 4, name: "صياغة التوصية ورسم المستويات", detail: "دخول ووقف وأهداف", status: "pending" },
 ];
 
 type ChatState = {
