@@ -106,12 +106,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
       .saveSession(activeId, {
         title,
         state: {
-          messages,
-          thoughts: chat.thoughts,
-          tools: chat.tools,
-          debate: chat.debate,
           artifacts: chat.artifacts,
-          recalls: chat.recalls,
           overlays: useWorkspace.getState().command?.type === "apply" ? useWorkspace.getState().command.overlays : [],
           recommendationId: messages.find((m) => m.recommendationId)?.recommendationId || null,
         },

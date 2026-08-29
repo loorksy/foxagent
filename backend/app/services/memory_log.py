@@ -46,6 +46,11 @@ class MemoryEntryRow(Base):
 _memory: dict[str, dict[str, Any]] = {}
 
 
+def decision_summary(*, recommendation_id: str, symbol: str, action: str, rating: str = "") -> str:
+    """Lightweight journal line. Full TradeRecommendation lives in recommendations.payload."""
+    return f"ref={recommendation_id} symbol={symbol} action={action} rating={rating}".strip()
+
+
 def embed_text(text: str) -> dict[str, float]:
     counts: Counter[str] = Counter(_TOKEN.findall((text or "").lower()))
     if not counts:

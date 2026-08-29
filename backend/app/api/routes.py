@@ -179,6 +179,10 @@ async def sessions_get(session_id: str) -> dict:
 
 @router.put("/sessions/{session_id}")
 async def sessions_put(session_id: str, body: SessionUpdate) -> dict:
+    # Client PUT is limited to operator-owned fields (title, symbol, timeframe,
+    # overlays, artifacts). Thoughts/tools/debate/recalls/messages are
+    # server-authoritative via append_session_event so a stale persistActive
+    # cannot drop transcript rows the crew already wrote.
     item = await get_session(session_id)
     if not item:
         item = await ensure_session(session_id, body.symbol or "XAU_USD", body.timeframe or "15m", body.title or "")
@@ -189,7 +193,14 @@ async def sessions_put(session_id: str, body: SessionUpdate) -> dict:
     if body.timeframe is not None:
         item["timeframe"] = body.timeframe
     if body.state is not None:
-        item["state"] = body.state
+        state = item.setdefault("state", {})
+        incoming = body.state
+        if "overlays" in incoming:
+            state["overlays"] = incoming.get("overlays") or []
+        if "artifacts" in incoming:
+            state["artifacts"] = incoming.get("artifacts") or []
+        if incoming.get("recommendationId") and not state.get("recommendationId"):
+            state["recommendationId"] = incoming.get("recommendationId")
     return await save_session(item)
 
 

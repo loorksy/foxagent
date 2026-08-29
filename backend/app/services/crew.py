@@ -690,12 +690,16 @@ async def _run_crew_body(
         await emit("agent_recommendation", dumped)
         await emit("recommendation", dumped)
         await append_session_event(session_id, "recommendation", dumped)
+        action = rec.tradeSetup.action.value if hasattr(rec.tradeSetup.action, "value") else str(rec.tradeSetup.action)
+        rating = rec.sentiment.value if hasattr(rec.sentiment, "value") else str(rec.sentiment)
+        from app.services.memory_log import decision_summary
+
         await store_decision(
             entry_id=new_id("mem"),
             symbol=req.symbol,
             kind="risk",
-            decision=json.dumps(dumped, default=str)[:4000],
-            rating=rec.sentiment.value if hasattr(rec.sentiment, "value") else str(rec.sentiment),
+            decision=decision_summary(recommendation_id=rec.id, symbol=req.symbol, action=action, rating=rating),
+            rating=rating,
             recommendation_id=rec.id,
         )
         return rec

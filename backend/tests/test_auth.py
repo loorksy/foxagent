@@ -63,7 +63,12 @@ def test_every_api_route_accepts_valid_token(client, auth_header, monkeypatch):
         await emit("assistant", {"text": "ok"})
         return {"runId": "run_auth", "recommendation": None}
 
+    async def fake_probe(*_a, **_k):
+        return {"ok": True, "keyValid": True, "detail": "ok"}
+
     monkeypatch.setattr("app.api.routes.run_chat", fake_run)
+    monkeypatch.setattr("app.api.routes.probe_anthropic", fake_probe)
+    monkeypatch.setattr("app.services.settings_store.probe_anthropic", fake_probe)
     routes = _protected_http_routes(client.app)
     failures: list[str] = []
     for method, path in routes:
@@ -73,7 +78,11 @@ def test_every_api_route_accepts_valid_token(client, auth_header, monkeypatch):
     assert not failures, "valid token must not be rejected:\n" + "\n".join(failures)
 
 
-def test_login_then_cookie_reaches_protected_route(client):
+def test_login_then_cookie_reaches_protected_route(client, monkeypatch):
+    async def fake_probe(*_a, **_k):
+        return {"ok": True, "keyValid": True, "detail": "ok"}
+
+    monkeypatch.setattr("app.api.routes.probe_anthropic", fake_probe)
     denied = client.get("/api/health")
     assert denied.status_code == 401
     login = client.post("/api/auth/login", json={"password": "test-operator-password"})
