@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import type { KlineOverlay, LivePrice, ViewMode } from "@/lib/types";
+import type { KlineOverlay, LivePrice } from "@/lib/types";
 import { PERIODS } from "@/lib/constants";
 
 type Period = (typeof PERIODS)[number];
@@ -12,7 +12,6 @@ type ChartCommand =
   | { type: "focus"; timestamp: number };
 
 type WorkspaceState = {
-  viewMode: ViewMode;
   symbol: string;
   period: Period;
   prices: Record<string, LivePrice>;
@@ -20,7 +19,6 @@ type WorkspaceState = {
   chartNonce: number;
   chartOpen: boolean;
   command: ChartCommand | null;
-  setViewMode: (mode: ViewMode) => void;
   setChartOpen: (open: boolean) => void;
   toggleChart: () => void;
   setSymbol: (symbol: string) => void;
@@ -34,7 +32,6 @@ type WorkspaceState = {
 };
 
 export const useWorkspace = create<WorkspaceState>((set) => ({
-  viewMode: "split",
   symbol: "XAU_USD",
   period: PERIODS[2],
   prices: {},
@@ -42,7 +39,6 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
   chartNonce: 0,
   chartOpen: false,
   command: null,
-  setViewMode: (viewMode) => set({ viewMode }),
   setChartOpen: (chartOpen) => set({ chartOpen }),
   toggleChart: () => set((s) => ({ chartOpen: !s.chartOpen })),
   setSymbol: (symbol) => set({ symbol, chartNonce: Date.now() }),

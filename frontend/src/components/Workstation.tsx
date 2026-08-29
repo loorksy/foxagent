@@ -13,7 +13,6 @@ import { useRecommendations } from "@/stores/recommendations";
 import { useSettings } from "@/stores/settings";
 import { useSessions } from "@/stores/sessions";
 import { useUi } from "@/stores/ui";
-import { cn } from "@/lib/utils";
 import type { LivePrice } from "@/lib/types";
 
 const ChartCanvas = dynamic(() => import("./ChartCanvas"), { ssr: false });

@@ -136,7 +136,6 @@ def _session_range(candles: list[OHLCV], start_h: int, end_h: int) -> tuple[floa
 def analyze_structure(candles: list[OHLCV]) -> StructureReport:
     if len(candles) < 20:
         last = candles[-1]
-        dummy = Swing(len(candles) - 1, last.timestamp, last.close, "low")
         return StructureReport(
             bias="NEUTRAL",
             last_bos=None,

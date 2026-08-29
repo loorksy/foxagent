@@ -6,11 +6,9 @@ import { api } from "@/lib/api";
 import { MODELS } from "@/lib/constants";
 
 type SettingsState = {
-  open: boolean;
   public: SettingsPublic | null;
   form: SettingsPayload;
   status: string;
-  setOpen: (open: boolean) => void;
   patchForm: (patch: Partial<SettingsPayload>) => void;
   load: () => Promise<void>;
   save: () => Promise<void>;
@@ -32,11 +30,9 @@ const emptyForm: SettingsPayload = {
 };
 
 export const useSettings = create<SettingsState>((set, get) => ({
-  open: false,
   public: null,
   form: emptyForm,
   status: "",
-  setOpen: (open) => set({ open }),
   patchForm: (patch) => set((s) => ({ form: { ...s.form, ...patch } })),
   load: async () => {
     const pub = await api.settings();

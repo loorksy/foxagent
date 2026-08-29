@@ -5,6 +5,7 @@ import { Eye, EyeOff, Send } from "lucide-react";
 import { useSettings } from "@/stores/settings";
 import { MODELS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 
 function Field({
   label,
@@ -49,9 +50,21 @@ export function SettingsPanel() {
   const validate = useSettings((s) => s.validate);
   const status = useSettings((s) => s.status);
   const pub = useSettings((s) => s.public);
+  const [probe, setProbe] = useState<{ ready?: boolean; configured?: boolean; keyValid?: boolean; detail?: string }>({});
 
   useEffect(() => {
     void load().catch(() => undefined);
+    void api
+      .health()
+      .then((h) =>
+        setProbe({
+          ready: h.anthropicReady ?? h.anthropic,
+          configured: h.anthropicConfigured,
+          keyValid: h.anthropicKeyValid,
+          detail: h.anthropicDetail,
+        })
+      )
+      .catch(() => undefined);
   }, [load]);
 
   return (
@@ -70,8 +83,19 @@ export function SettingsPanel() {
             placeholder={pub?.anthropicApiKeySet ? "•••• محفوظ" : "sk-ant-..."}
           />
           <button type="button" onClick={() => void validate("anthropic")} className="text-[12px] text-info hover:underline">
-            التحقق من المفتاح
+            التحقق من المفتاح عبر Anthropic
           </button>
+          {probe.detail && (
+            <p className={cn("text-[12px]", probe.ready ? "text-buy" : "text-sell")}>
+              {probe.configured
+                ? probe.ready
+                  ? "المفتاح محفوظ ويعمل: Claude يرد على الطلبات."
+                  : probe.keyValid
+                    ? `المفتاح صحيح لكن Anthropic رفض التشغيل: ${probe.detail}`
+                    : probe.detail
+                : "لا يوجد ANTHROPIC_API_KEY محفوظ."}
+            </p>
+          )}
           <label className="block space-y-1.5">
             <span className="text-[11px] font-medium text-muted-foreground">نموذج كلود الافتراضي</span>
             <select
@@ -207,7 +231,7 @@ export function SettingsPanel() {
           <p
             className={cn(
               "rounded-lg px-3 py-2 text-xs",
-              /fail|error|required|فشل/i.test(status) ? "bg-sell/10 text-sell" : "bg-buy/10 text-buy"
+              /fail|error|required|credit|too low|missing|فشل/i.test(status) ? "bg-sell/10 text-sell" : "bg-buy/10 text-buy"
             )}
           >
             {status}

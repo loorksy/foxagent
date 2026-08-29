@@ -54,6 +54,9 @@ export async function sendAgentMessage(raw: string) {
         if (event.type === "assistant" && p.text && !p.recommendationId) {
           useChat.getState().appendAssistant(String(p.text));
         }
+        if (event.type === "error" && p.detail) {
+          useChat.getState().appendAssistant(String(p.detail));
+        }
         if (event.type === "recommendation" && p.id) {
           const rec = p as unknown as TradeRecommendation;
           useRecommendations.getState().upsert(rec);

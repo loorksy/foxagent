@@ -1,5 +1,3 @@
-export type ViewMode = "split" | "chart" | "chat";
-
 export type OverlayPoint = {
   timestamp: number;
   value: number;

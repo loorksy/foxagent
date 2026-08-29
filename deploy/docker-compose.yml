@@ -14,6 +14,7 @@ services:
       API_PORT: 8000
       CORS_ORIGINS: ${FOXAGENT_PUBLIC_ORIGIN:-*}
       DATABASE_URL: sqlite+aiosqlite:////data/foxagent.db
+      FOXAGENT_DATA_DIR: /data
     volumes:
       - foxagent_data:/data
     networks:

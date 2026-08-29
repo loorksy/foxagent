@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
 import os
+import time
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -14,6 +16,26 @@ from app.schemas import SettingsPayload, SettingsPublic
 
 KEY_FILE = DATA_DIR / ".foxagent.key"
 SETTINGS_KV = "runtime_settings"
+_PROBE_TTL_SEC = 120.0
+_probe_cache: tuple[float, str, dict] | None = None
+
+
+def _data_root() -> Path:
+    override = os.environ.get("FOXAGENT_DATA_DIR", "").strip()
+    if override:
+        return Path(override)
+    volume = Path("/data")
+    if volume.is_dir() and os.access(volume, os.W_OK):
+        return volume
+    return DATA_DIR
+
+
+def _key_candidates() -> list[Path]:
+    root = _data_root()
+    paths = [root / ".foxagent.key"]
+    if KEY_FILE not in paths:
+        paths.append(KEY_FILE)
+    return paths
 
 
 def _fernet() -> Fernet:
@@ -22,12 +44,26 @@ def _fernet() -> Fernet:
     if secret:
         digest = hashlib.sha256(secret.encode()).digest()
         return Fernet(base64.urlsafe_b64encode(digest))
-    if KEY_FILE.exists():
-        return Fernet(KEY_FILE.read_bytes())
+    for path in _key_candidates():
+        if not path.exists():
+            continue
+        raw = path.read_bytes()
+        durable = _data_root() / ".foxagent.key"
+        if path != durable:
+            try:
+                durable.parent.mkdir(parents=True, exist_ok=True)
+                if not durable.exists():
+                    durable.write_bytes(raw)
+                    os.chmod(durable, 0o600)
+            except OSError:
+                pass
+        return Fernet(raw)
     key = Fernet.generate_key()
-    KEY_FILE.write_bytes(key)
+    dest = _data_root() / ".foxagent.key"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(key)
     try:
-        os.chmod(KEY_FILE, 0o600)
+        os.chmod(dest, 0o600)
     except OSError:
         pass
     return Fernet(key)
@@ -123,20 +159,75 @@ def to_public(payload: SettingsPayload) -> SettingsPublic:
     )
 
 
-async def validate_anthropic_key(api_key: str) -> dict:
-    if not api_key:
-        return {"ok": False, "detail": "Missing key"}
-    try:
-        import anthropic
+async def resolve_anthropic_key(explicit: str = "") -> str:
+    if (explicit or "").strip():
+        return explicit.strip()
+    runtime = await load_runtime_settings()
+    return (runtime.anthropicApiKey or get_settings().anthropic_api_key or "").strip()
 
-        client = anthropic.Anthropic(api_key=api_key)
-        client.models.list()
-        return {"ok": True, "detail": "Anthropic key accepted"}
+
+def _sanitize_anthropic_error(exc: Exception, api_key: str) -> str:
+    text = str(exc)
+    if api_key:
+        text = text.replace(api_key, "[redacted]")
+    return text[:400]
+
+
+def _probe_anthropic_sync(api_key: str, live_completion: bool) -> dict:
+    import anthropic
+
+    client = anthropic.Anthropic(api_key=api_key)
+    client.models.list()
+    if not live_completion:
+        return {"ok": True, "keyValid": True, "detail": "Anthropic key accepted"}
+    model = get_settings().default_claude_model or "claude-sonnet-4-5"
+    client.messages.create(
+        model=model,
+        max_tokens=8,
+        messages=[{"role": "user", "content": "Reply with the single word PONG"}],
+    )
+    return {"ok": True, "keyValid": True, "detail": "Anthropic key accepted and can create messages"}
+
+
+async def probe_anthropic(
+    api_key: str = "",
+    *,
+    live_completion: bool = True,
+    use_cache: bool = False,
+) -> dict:
+    key = await resolve_anthropic_key(api_key)
+    if not key:
+        return {"ok": False, "keyValid": False, "detail": "Missing ANTHROPIC_API_KEY"}
+    global _probe_cache
+    cache_token = f"{key[-8:]}:{int(live_completion)}"
+    now = time.monotonic()
+    if use_cache and _probe_cache:
+        cached_at, token, payload = _probe_cache
+        if token == cache_token and now - cached_at < _PROBE_TTL_SEC:
+            return payload
+    try:
+        payload = await asyncio.to_thread(_probe_anthropic_sync, key, live_completion)
     except Exception as exc:
-        return {"ok": False, "detail": str(exc)}
+        detail = _sanitize_anthropic_error(exc, key)
+        lowered = detail.lower()
+        key_valid = "credit balance" in lowered or "too low to access" in lowered
+        if "authentication" in lowered or "invalid x-api-key" in lowered or "invalid api key" in lowered:
+            key_valid = False
+        payload = {"ok": False, "keyValid": key_valid, "detail": detail}
+    if use_cache:
+        _probe_cache = (now, cache_token, payload)
+    return payload
+
+
+async def validate_anthropic_key(api_key: str = "") -> dict:
+    return await probe_anthropic(api_key, live_completion=True, use_cache=False)
 
 
 async def validate_oanda(token: str, account_id: str, environment: str) -> dict:
+    runtime = await load_runtime_settings()
+    token = token or runtime.oandaApiToken
+    account_id = account_id or runtime.oandaAccountId
+    environment = environment or runtime.oandaEnvironment
     if not token or not account_id:
         return {"ok": False, "detail": "Token and account id required"}
     import httpx

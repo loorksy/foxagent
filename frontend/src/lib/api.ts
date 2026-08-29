@@ -18,8 +18,16 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  health: () => http<{ ok: boolean; dataMode: string; anthropic: boolean }>("/api/health"),
-  instruments: () => http<{ instruments: { ticker: string; display: string; name: string; pricePrecision: number; pip: number }[] }>("/api/instruments"),
+  health: () =>
+    http<{
+      ok: boolean;
+      dataMode: string;
+      anthropic: boolean;
+      anthropicConfigured?: boolean;
+      anthropicKeyValid?: boolean;
+      anthropicReady?: boolean;
+      anthropicDetail?: string;
+    }>("/api/health"),
   candles: (instrument: string, granularity: string, count = 400) =>
     http<{ candles: KLineBar[] }>(`/api/candles?instrument=${instrument}&granularity=${granularity}&count=${count}`),
   recommendations: () => http<{ recommendations: TradeRecommendation[] }>("/api/recommendations"),
@@ -27,12 +35,7 @@ export const api = {
   saveSettings: (body: SettingsPayload) =>
     http<SettingsPublic>("/api/settings", { method: "PUT", body: JSON.stringify(body) }),
   validateSettings: (body: Record<string, unknown>) =>
-    http<{ ok: boolean; detail: string }>("/api/settings/validate", { method: "POST", body: JSON.stringify(body) }),
-  chat: (body: { message: string; symbol: string; timeframe: string; model: string }) =>
-    http<{ runId: string; engine: string; recommendation: TradeRecommendation | null }>("/api/agent/chat", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
+    http<{ ok: boolean; detail: string; keyValid?: boolean }>("/api/settings/validate", { method: "POST", body: JSON.stringify(body) }),
   prices: () => http<{ prices: import("./types").LivePrice[] }>("/api/prices"),
   streamChat: async (
     body: { message: string; symbol: string; timeframe: string; model: string },

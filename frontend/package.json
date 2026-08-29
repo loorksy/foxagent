@@ -9,9 +9,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@klinecharts/pro": "^0.1.1",
-    "@tanstack/react-query": "^5.102.8",
-    "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "klinecharts": "^9.8.12",
     "lucide-react": "^1.35.0",

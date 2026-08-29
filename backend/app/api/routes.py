@@ -15,6 +15,7 @@ from app.services.chart_capture import render_candles_b64
 from app.services.oanda import oanda
 from app.services.settings_store import (
     load_runtime_settings,
+    probe_anthropic,
     save_runtime_settings,
     to_public,
     validate_anthropic_key,
@@ -31,11 +32,17 @@ router = APIRouter()
 async def health() -> dict:
     settings = get_settings()
     runtime = await load_runtime_settings()
+    probe = await probe_anthropic(live_completion=True, use_cache=True)
+    configured = bool(runtime.anthropicApiKey)
     return {
         "ok": True,
         "service": settings.app_name,
         "dataMode": "oanda" if runtime.oandaApiToken and runtime.oandaAccountId else "simulator",
-        "anthropic": bool(runtime.anthropicApiKey),
+        "anthropic": bool(probe.get("ok")),
+        "anthropicConfigured": configured,
+        "anthropicKeyValid": bool(probe.get("keyValid")),
+        "anthropicReady": bool(probe.get("ok")),
+        "anthropicDetail": probe.get("detail") or "",
     }
 
 
@@ -150,7 +157,7 @@ async def settings_validate(body: dict) -> dict:
         return await validate_oanda(
             body.get("oandaApiToken") or "",
             body.get("oandaAccountId") or "",
-            body.get("oandaEnvironment") or "practice",
+            body.get("oandaEnvironment") or "",
         )
     if target == "telegram":
         runtime = await load_runtime_settings()
