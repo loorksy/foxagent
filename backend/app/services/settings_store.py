@@ -62,6 +62,11 @@ async def load_runtime_settings() -> SettingsPayload:
         maxRiskPercent=stored.maxRiskPercent or env.max_risk_percent,
         minRiskReward=stored.minRiskReward or env.min_risk_reward,
         allowedSessions=stored.allowedSessions or [s.strip() for s in env.allowed_sessions.split(",") if s.strip()],
+        telegramBotToken=stored.telegramBotToken or env.telegram_bot_token,
+        telegramChatId=stored.telegramChatId or env.telegram_chat_id,
+        enableTelegramNotifications=(
+            stored.enableTelegramNotifications if raw else env.enable_telegram_notifications
+        ),
     )
 
 
@@ -76,14 +81,23 @@ def apply_runtime_to_env(payload: SettingsPayload) -> None:
     env.max_risk_percent = payload.maxRiskPercent
     env.min_risk_reward = payload.minRiskReward
     env.allowed_sessions = ",".join(payload.allowedSessions)
+    env.telegram_bot_token = payload.telegramBotToken
+    env.telegram_chat_id = payload.telegramChatId
+    env.enable_telegram_notifications = payload.enableTelegramNotifications
 
 
 async def save_runtime_settings(payload: SettingsPayload) -> SettingsPublic:
+    current = await load_runtime_settings()
+    if not payload.anthropicApiKey:
+        payload.anthropicApiKey = current.anthropicApiKey
+    if not payload.oandaApiToken:
+        payload.oandaApiToken = current.oandaApiToken
+    if not payload.telegramBotToken:
+        payload.telegramBotToken = current.telegramBotToken
     token = _fernet().encrypt(payload.model_dump_json().encode()).decode()
     await kv_set(SETTINGS_KV, token)
     apply_runtime_to_env(payload)
     get_settings.cache_clear()  # type: ignore[attr-defined]
-    # restore applied values after cache clear by writing back onto new instance
     apply_runtime_to_env(payload)
     return to_public(payload)
 
@@ -102,6 +116,10 @@ def to_public(payload: SettingsPayload) -> SettingsPublic:
         oandaConfigured=bool(payload.oandaApiToken and payload.oandaAccountId),
         anthropicConfigured=bool(payload.anthropicApiKey),
         dataMode="oanda" if (payload.oandaApiToken and payload.oandaAccountId) else "simulator",
+        telegramBotTokenSet=bool(payload.telegramBotToken),
+        telegramChatId=payload.telegramChatId,
+        enableTelegramNotifications=payload.enableTelegramNotifications,
+        telegramConfigured=bool(payload.telegramBotToken and payload.telegramChatId),
     )
 
 

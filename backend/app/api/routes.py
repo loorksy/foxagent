@@ -20,6 +20,7 @@ from app.services.settings_store import (
     validate_anthropic_key,
     validate_oanda,
 )
+from app.services.telegram_service import schedule_trade_alert, send_test_ping
 from app.services.simulator import INSTRUMENT_SPECS, normalize_granularity
 from app.api.ws import emit_agent
 
@@ -115,6 +116,7 @@ async def rec_one(rec_id: str) -> dict:
 @router.post("/recommendations")
 async def rec_create(body: TradeRecommendation) -> dict:
     saved = await save_recommendation(body)
+    schedule_trade_alert(saved)
     await emit_agent("recommendation", saved.model_dump(mode="json"))
     return saved.model_dump(mode="json")
 
@@ -150,6 +152,11 @@ async def settings_validate(body: dict) -> dict:
             body.get("oandaAccountId") or "",
             body.get("oandaEnvironment") or "practice",
         )
+    if target == "telegram":
+        runtime = await load_runtime_settings()
+        token = body.get("telegramBotToken") or runtime.telegramBotToken
+        chat = body.get("telegramChatId") or runtime.telegramChatId
+        return await send_test_ping(token, chat)
     return {"ok": False, "detail": "Unknown target"}
 
 

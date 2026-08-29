@@ -7,7 +7,8 @@ from app.services.analysis import analyze_structure, structure_summary
 from app.services.chart_capture import render_candles_b64
 from app.services.oanda import oanda
 from app.db import save_recommendation
-from app.schemas import TradeRecommendation
+from app.schemas import KlineOverlay, TradeRecommendation
+from app.services.telegram_service import schedule_trade_alert
 
 Emit = Callable[[str, dict[str, Any]], Awaitable[None]]
 
@@ -22,9 +23,20 @@ async def tool_get_live_price(instrument: str) -> dict[str, Any]:
     return px.model_dump(mode="json")
 
 
-async def tool_capture_chart_screenshot(instrument: str, granularity: str, count: int = 180) -> str:
+async def tool_capture_chart_screenshot(
+    instrument: str,
+    granularity: str,
+    count: int = 180,
+    overlays: list[dict] | None = None,
+) -> str:
     candles = await oanda.get_candles(instrument, granularity, count)
-    return render_candles_b64(candles, f"{instrument} {granularity}")
+    parsed: list[KlineOverlay] = []
+    for item in overlays or []:
+        try:
+            parsed.append(KlineOverlay.model_validate(item))
+        except Exception:
+            continue
+    return render_candles_b64(candles, f"{instrument} {granularity}", parsed or None)
 
 
 async def tool_structure_scan(instrument: str, granularity: str, count: int = 300) -> dict[str, Any]:
@@ -36,6 +48,7 @@ async def tool_structure_scan(instrument: str, granularity: str, count: int = 30
 async def tool_send_recommendation(payload: dict[str, Any], emit: Emit | None = None) -> bool:
     rec = TradeRecommendation.model_validate(payload)
     await save_recommendation(rec)
+    schedule_trade_alert(rec)
     if emit:
         await emit("recommendation", rec.model_dump(mode="json"))
     return True
@@ -67,13 +80,17 @@ def mcp_tool_specs() -> list[dict[str, Any]]:
         },
         {
             "name": "capture_chart_screenshot",
-            "description": "Render a dark candlestick chart snapshot and return a base64 PNG for visual pattern recognition.",
+            "description": "Render a dark candlestick chart snapshot (optional klineOverlays drawn first) and return a base64 PNG.",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "instrument": {"type": "string"},
                     "granularity": {"type": "string"},
                     "count": {"type": "integer"},
+                    "overlays": {
+                        "type": "array",
+                        "description": "klineOverlays JSON (rect, trendLine, fibonacci, priceLine, textAnnotation)",
+                    },
                 },
                 "required": ["instrument", "granularity"],
             },
@@ -117,6 +134,7 @@ async def dispatch_tool(name: str, args: dict[str, Any], emit: Emit | None = Non
             args["instrument"],
             args["granularity"],
             int(args.get("count") or 180),
+            args.get("overlays"),
         )
     if name == "structure_scan":
         return await tool_structure_scan(
@@ -160,7 +178,10 @@ def try_build_sdk_server():
     )
     async def capture_chart_screenshot(args: dict[str, Any]) -> dict[str, Any]:
         b64 = await tool_capture_chart_screenshot(
-            args["instrument"], args["granularity"], int(args.get("count") or 180)
+            args["instrument"],
+            args["granularity"],
+            int(args.get("count") or 180),
+            args.get("overlays"),
         )
         return {
             "content": [

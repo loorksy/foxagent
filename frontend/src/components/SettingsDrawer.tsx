@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useSettings } from "@/stores/settings";
 import { MODELS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { Eye, EyeOff, X } from "lucide-react";
+import { Eye, EyeOff, Send, X } from "lucide-react";
 
 function Field({
   label,
@@ -196,7 +196,66 @@ export function SettingsDrawer() {
             </div>
           </div>
 
-          {status && <p className="text-xs text-cyan-200">{status}</p>}
+          <div className="rounded-xl border border-white/10 bg-black/25 p-3 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-wider text-slate-500">Telegram alerts</p>
+                <p className="text-xs text-slate-400">Broadcast setups + overlay snapshots to a chat or channel.</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={form.enableTelegramNotifications}
+                onClick={() => patchForm({ enableTelegramNotifications: !form.enableTelegramNotifications })}
+                className={cn(
+                  "relative h-6 w-11 shrink-0 rounded-full transition",
+                  form.enableTelegramNotifications ? "bg-gold-500" : "bg-white/15"
+                )}
+              >
+                <span
+                  className={cn(
+                    "absolute top-0.5 h-5 w-5 rounded-full bg-white transition",
+                    form.enableTelegramNotifications ? "left-5" : "left-0.5"
+                  )}
+                />
+              </button>
+            </div>
+            <p className="text-[10px] uppercase tracking-wider text-slate-600">ENABLE_TELEGRAM_NOTIFICATIONS</p>
+            <Field
+              label="TELEGRAM_BOT_TOKEN"
+              secret
+              value={form.telegramBotToken}
+              onChange={(telegramBotToken) => patchForm({ telegramBotToken })}
+              placeholder={pub?.telegramBotTokenSet ? "•••• token stored" : "123456:AA..."}
+            />
+            <Field
+              label="TELEGRAM_CHAT_ID"
+              value={form.telegramChatId}
+              onChange={(telegramChatId) => patchForm({ telegramChatId })}
+              placeholder="-100… or @channel, comma-separated"
+            />
+            <button
+              type="button"
+              onClick={() => void validate("telegram")}
+              className="inline-flex items-center gap-1.5 text-[11px] text-cyan-300 hover:underline"
+            >
+              <Send className="h-3 w-3" />
+              Send test message
+            </button>
+          </div>
+
+          {status && (
+            <p
+              className={cn(
+                "rounded-lg px-3 py-2 text-xs",
+                status.toLowerCase().includes("fail") || status.toLowerCase().includes("required") || status.toLowerCase().includes("error")
+                  ? "bg-rose-500/10 text-rose-200"
+                  : "bg-cyan-400/10 text-cyan-200"
+              )}
+            >
+              {status}
+            </p>
+          )}
 
           <button
             type="button"

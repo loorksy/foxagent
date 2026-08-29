@@ -127,6 +127,10 @@ export type SettingsPublic = {
   oandaConfigured: boolean;
   anthropicConfigured: boolean;
   dataMode: "oanda" | "simulator";
+  telegramBotTokenSet: boolean;
+  telegramChatId: string;
+  enableTelegramNotifications: boolean;
+  telegramConfigured: boolean;
 };
 
 export type SettingsPayload = {
@@ -138,4 +142,7 @@ export type SettingsPayload = {
   maxRiskPercent: number;
   minRiskReward: number;
   allowedSessions: string[];
+  telegramBotToken: string;
+  telegramChatId: string;
+  enableTelegramNotifications: boolean;
 };

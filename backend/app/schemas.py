@@ -178,6 +178,9 @@ class SettingsPayload(BaseModel):
     maxRiskPercent: float = 1.0
     minRiskReward: float = 2.0
     allowedSessions: list[str] = Field(default_factory=lambda: ["london", "ny", "asian"])
+    telegramBotToken: str = ""
+    telegramChatId: str = ""
+    enableTelegramNotifications: bool = False
 
 
 class SettingsPublic(BaseModel):
@@ -192,6 +195,10 @@ class SettingsPublic(BaseModel):
     oandaConfigured: bool = False
     anthropicConfigured: bool = False
     dataMode: Literal["oanda", "simulator"] = "simulator"
+    telegramBotTokenSet: bool = False
+    telegramChatId: str = ""
+    enableTelegramNotifications: bool = False
+    telegramConfigured: bool = False
 
 
 class AgentPhase(BaseModel):

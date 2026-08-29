@@ -52,7 +52,8 @@ docker compose up -d
 - **klinecharts** canvas with live ticks, MA / VOL / MACD, animated ICT overlays (`rect`, `trendLine`, `fibonacci`, `priceLine`, `textAnnotation`)
 - **View on Chart / Apply to Chart** recenters the candle at `focusTimestamp` and draws the setup
 - **Recommendations ledger** with R:R, entry / SL / TP, confluence, status
-- **Settings drawer** for Anthropic + OANDA secrets (Fernet-encrypted at rest) and risk rules
+- **Settings drawer** for Anthropic + OANDA + Telegram secrets (Fernet-encrypted at rest) and risk rules
+- **Telegram dispatcher**: when a setup is saved, a background task sends an HTML alert plus an overlay chart snapshot (`sendPhoto`, caption ≤ 1024 chars). Disabled or missing secrets fail closed.
 
 ## Agent contract
 

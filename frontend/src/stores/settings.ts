@@ -14,7 +14,7 @@ type SettingsState = {
   patchForm: (patch: Partial<SettingsPayload>) => void;
   load: () => Promise<void>;
   save: () => Promise<void>;
-  validate: (target: "anthropic" | "oanda") => Promise<void>;
+  validate: (target: "anthropic" | "oanda" | "telegram") => Promise<void>;
 };
 
 const emptyForm: SettingsPayload = {
@@ -26,6 +26,9 @@ const emptyForm: SettingsPayload = {
   maxRiskPercent: 1,
   minRiskReward: 2,
   allowedSessions: ["london", "ny", "asian"],
+  telegramBotToken: "",
+  telegramChatId: "",
+  enableTelegramNotifications: false,
 };
 
 export const useSettings = create<SettingsState>((set, get) => ({
@@ -47,6 +50,8 @@ export const useSettings = create<SettingsState>((set, get) => ({
         maxRiskPercent: pub.maxRiskPercent,
         minRiskReward: pub.minRiskReward,
         allowedSessions: pub.allowedSessions,
+        telegramChatId: pub.telegramChatId || "",
+        enableTelegramNotifications: Boolean(pub.enableTelegramNotifications),
       },
     }));
   },
@@ -62,6 +67,8 @@ export const useSettings = create<SettingsState>((set, get) => ({
       oandaApiToken: form.oandaApiToken,
       oandaAccountId: form.oandaAccountId,
       oandaEnvironment: form.oandaEnvironment,
+      telegramBotToken: form.telegramBotToken,
+      telegramChatId: form.telegramChatId,
     });
     set({ status: res.detail });
   },

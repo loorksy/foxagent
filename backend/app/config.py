@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     min_risk_reward: float = 2.0
     allowed_sessions: str = "london,ny,asian"
 
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+    enable_telegram_notifications: bool = False
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

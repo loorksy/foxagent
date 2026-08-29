@@ -8,6 +8,7 @@ from typing import Any, Callable, Awaitable
 
 from app.config import get_settings
 from app.db import save_recommendation
+from app.services.telegram_service import schedule_trade_alert
 from app.schemas import ChatRequest, TradeRecommendation, new_id
 from app.services.analysis import analyze_structure, build_recommendation, structure_summary
 from app.services.chart_capture import render_candles_b64
@@ -177,6 +178,7 @@ async def run_algorithmic(
     )
     rec = rec.model_copy(update={"id": rec.id})
     await save_recommendation(rec)
+    schedule_trade_alert(rec)
     await emit("recommendation", rec.model_dump(mode="json") | {"runId": run_id})
     await emit(
         "assistant",
@@ -294,6 +296,7 @@ async def run_anthropic_loop(req: ChatRequest, emit: Emit, run_id: str) -> Trade
         if stop_reason != "tool_use" or not tool_uses:
             if rec:
                 await save_recommendation(rec)
+                schedule_trade_alert(rec)
                 await emit("recommendation", rec.model_dump(mode="json") | {"runId": run_id})
             return rec
 
@@ -396,6 +399,7 @@ async def run_claude_agent_sdk(req: ChatRequest, emit: Emit, run_id: str) -> Tra
     if parsed and "tradeSetup" in parsed:
         rec = TradeRecommendation.model_validate(parsed)
         await save_recommendation(rec)
+        schedule_trade_alert(rec)
         await emit("recommendation", rec.model_dump(mode="json") | {"runId": run_id})
         return rec
     return None
