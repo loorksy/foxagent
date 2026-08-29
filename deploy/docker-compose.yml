@@ -15,6 +15,10 @@ services:
       CORS_ORIGINS: ${FOXAGENT_PUBLIC_ORIGIN:-*}
       DATABASE_URL: sqlite+aiosqlite:////data/foxagent.db
       FOXAGENT_DATA_DIR: /data
+      APP_PASSWORD: ${APP_PASSWORD:-}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
+      JWT_SECRET: ${JWT_SECRET:-}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-720}
     volumes:
       - foxagent_data:/data
     networks:

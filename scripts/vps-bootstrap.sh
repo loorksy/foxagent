@@ -5,7 +5,7 @@ set -euo pipefail
 APP_DIR="${FOXAGENT_DIR:-/opt/foxagent}"
 DEFAULT_PORT="${FOXAGENT_HTTP_PORT:-18180}"
 REPO_URL="${FOXAGENT_REPO:-https://github.com/loorksy/foxagent.git}"
-REPO_REF="${FOXAGENT_REF:-cursor/autonomous-trading-agent-5f84}"
+REPO_REF="${FOXAGENT_REF:-main}"
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1
