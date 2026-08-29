@@ -79,46 +79,64 @@ export function DeskLayout({ children }: { children?: React.ReactNode }) {
 
   useEffect(() => {
     let stop = false;
-    async function poll() {
-      while (!stop) {
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let pollActive = false;
+
+    function applyTick(px: LivePrice) {
+      setPrice(px);
+      markFromPrice(px.instrument, px.mid);
+    }
+
+    async function pollWhileDisconnected() {
+      if (pollActive) return;
+      pollActive = true;
+      while (!stop && (!ws || ws.readyState !== WebSocket.OPEN)) {
         try {
           const data = await api.prices();
-          data.prices.forEach((px) => {
-            setPrice(px);
-            markFromPrice(px.instrument, px.mid);
-          });
+          data.prices.forEach(applyTick);
         } catch {
           /* ignore */
         }
         await new Promise((r) => setTimeout(r, 900));
       }
+      pollActive = false;
     }
-    void poll();
-    return () => {
-      stop = true;
-    };
-  }, [markFromPrice, setPrice]);
 
-  useEffect(() => {
-    let ws: WebSocket | null = null;
-    try {
-      ws = new WebSocket(wsUrl("/ws/market"));
+    function connect() {
+      if (stop) return;
+      try {
+        ws = new WebSocket(wsUrl("/ws/market"));
+      } catch {
+        void pollWhileDisconnected();
+        return;
+      }
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data);
-          if (msg.type === "tick") {
-            const px = msg.payload as LivePrice;
-            setPrice(px);
-            markFromPrice(px.instrument, px.mid);
-          }
+          if (msg.type === "tick") applyTick(msg.payload as LivePrice);
         } catch {
           /* ignore */
         }
       };
-    } catch {
-      /* polling fallback */
+      ws.onclose = () => {
+        if (stop) return;
+        void pollWhileDisconnected();
+        reconnectTimer = setTimeout(connect, 1000);
+      };
+      ws.onerror = () => {
+        try {
+          ws?.close();
+        } catch {
+          /* ignore */
+        }
+      };
     }
+
+    connect();
     return () => {
+      stop = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       ws?.close();
     };
   }, [markFromPrice, setPrice]);

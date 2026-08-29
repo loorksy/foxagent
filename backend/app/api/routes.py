@@ -55,11 +55,8 @@ async def health() -> dict:
         "anthropicKeyValid": bool(probe.get("keyValid")),
         "anthropicReady": bool(probe.get("ok")),
         "anthropicDetail": probe.get("detail") or "",
-<<<<<<< HEAD
         **sdk_stats.snapshot(),
-=======
         "goldWarehouse": await _gold_warehouse_health(),
->>>>>>> 1bad6c6 (feat: add rolling 2-year XAU_USD candle warehouse)
     }
 
 
@@ -105,6 +102,7 @@ async def candles(instrument: str = "XAU_USD", granularity: str = "M15", count: 
 
 @router.get("/prices")
 async def prices() -> dict:
+    """HTTP fallback for live prices when /ws/market is disconnected."""
     from app.services.simulator import INSTRUMENT_SPECS
 
     out = []
