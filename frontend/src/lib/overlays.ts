@@ -1,6 +1,6 @@
 import type { KlineOverlay } from "./types";
 
-type ChartLike = {
+export type ChartLike = {
   createOverlay: (opts: Record<string, unknown>) => string | null;
   removeOverlay: (opts?: Record<string, unknown>) => void;
   getDataList?: () => { timestamp: number }[];

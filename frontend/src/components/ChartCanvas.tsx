@@ -4,7 +4,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { useWorkspace } from "@/stores/workspace";
 import { api } from "@/lib/api";
 import { DARK_CHART_STYLES } from "@/lib/chart-styles";
-import { applyOverlays, clearOverlays, focusTimestamp } from "@/lib/overlays";
+import { applyOverlays, clearOverlays, focusTimestamp, type ChartLike } from "@/lib/overlays";
 import type { KLineBar, KlineOverlay } from "@/lib/types";
 
 export type ChartHandle = {
@@ -13,13 +13,20 @@ export type ChartHandle = {
   focus: (ts: number) => void;
 };
 
+type ChartApi = ChartLike & {
+  applyNewData: (bars: KLineBar[]) => void;
+  updateData: (bar: KLineBar) => void;
+  createIndicator: (name: string, isStack?: boolean, pane?: { id: string }) => void;
+  resize: () => void;
+};
+
 type Props = {
   className?: string;
 };
 
 const ChartCanvas = forwardRef<ChartHandle, Props>(function ChartCanvas({ className }, ref) {
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const chartRef = useRef<any>(null);
+  const chartRef = useRef<ChartApi | null>(null);
   const barsRef = useRef<KLineBar[]>([]);
   const symbol = useWorkspace((s) => s.symbol);
   const period = useWorkspace((s) => s.period);
@@ -48,7 +55,9 @@ const ChartCanvas = forwardRef<ChartHandle, Props>(function ChartCanvas({ classN
         mod.dispose(hostRef.current);
         chartRef.current = null;
       }
-      const chart = mod.init(hostRef.current, { styles: DARK_CHART_STYLES as any });
+      const chart = mod.init(hostRef.current, {
+        styles: DARK_CHART_STYLES,
+      }) as ChartApi | null;
       if (!chart) return;
       chartRef.current = chart;
       try {
@@ -69,7 +78,7 @@ const ChartCanvas = forwardRef<ChartHandle, Props>(function ChartCanvas({ classN
       await loadHistory(chart);
     }
 
-    async function loadHistory(chart: any) {
+    async function loadHistory(chart: ChartApi) {
       try {
         const data = await api.candles(symbol, period.granularity, 400);
         barsRef.current = data.candles;
@@ -79,14 +88,15 @@ const ChartCanvas = forwardRef<ChartHandle, Props>(function ChartCanvas({ classN
       }
     }
 
+    const host = hostRef.current;
     boot();
     return () => {
       disposed = true;
       ro?.disconnect();
-      if (hostRef.current) {
+      if (host) {
         import("klinecharts").then((mod) => {
           try {
-            mod.dispose(hostRef.current as HTMLElement);
+            mod.dispose(host);
           } catch {
             /* ignore */
           }
