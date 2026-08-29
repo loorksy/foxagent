@@ -5,6 +5,7 @@ import { useWorkspace } from "@/stores/workspace";
 import { api } from "@/lib/api";
 import { DARK_CHART_STYLES } from "@/lib/chart-styles";
 import { applyOverlays, clearOverlays, focusTimestamp, type ChartLike } from "@/lib/overlays";
+import { cn } from "@/lib/utils";
 import type { KLineBar, KlineOverlay } from "@/lib/types";
 
 export type ChartHandle = {
@@ -139,7 +140,7 @@ const ChartCanvas = forwardRef<ChartHandle, Props>(function ChartCanvas({ classN
   }, [command]);
 
   return (
-    <div className={className}>
+    <div className={cn("h-full w-full bg-background", className)}>
       <div ref={hostRef} className="h-full w-full" />
     </div>
   );

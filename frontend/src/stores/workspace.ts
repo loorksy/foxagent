@@ -18,8 +18,11 @@ type WorkspaceState = {
   prices: Record<string, LivePrice>;
   dataMode: "oanda" | "simulator";
   chartNonce: number;
+  chartOpen: boolean;
   command: ChartCommand | null;
   setViewMode: (mode: ViewMode) => void;
+  setChartOpen: (open: boolean) => void;
+  toggleChart: () => void;
   setSymbol: (symbol: string) => void;
   setPeriod: (period: Period) => void;
   setTimeframe: (text: string) => void;
@@ -37,8 +40,11 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
   prices: {},
   dataMode: "simulator",
   chartNonce: 0,
+  chartOpen: false,
   command: null,
   setViewMode: (viewMode) => set({ viewMode }),
+  setChartOpen: (chartOpen) => set({ chartOpen }),
+  toggleChart: () => set((s) => ({ chartOpen: !s.chartOpen })),
   setSymbol: (symbol) => set({ symbol, chartNonce: Date.now() }),
   setPeriod: (period) => set({ period }),
   setTimeframe: (text) =>
@@ -52,8 +58,8 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
   applyToChart: (overlays, focusTimestamp, recId) =>
     set({
       command: { type: "apply", overlays, focusTimestamp, recId },
-      viewMode: "split",
+      chartOpen: true,
     }),
   clearOverlays: () => set({ command: { type: "clear" } }),
-  focusTimestamp: (timestamp) => set({ command: { type: "focus", timestamp }, viewMode: "split" }),
+  focusTimestamp: (timestamp) => set({ command: { type: "focus", timestamp }, chartOpen: true }),
 }));

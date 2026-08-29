@@ -2,28 +2,35 @@
 
 import { useEffect } from "react";
 import dynamic from "next/dynamic";
-import { HeaderBar } from "./HeaderBar";
-import { AgentConsole } from "./AgentConsole";
-import { RecommendationsLedger } from "./RecommendationsLedger";
-import { SettingsDrawer } from "./SettingsDrawer";
+import { Sidebar } from "./shell/Sidebar";
+import { TopBar } from "./shell/TopBar";
+import { ChatPanel } from "./chat/ChatPanel";
+import { RecommendationsPage } from "./recs/RecommendationsPage";
+import { SettingsPanel } from "./settings/SettingsPanel";
 import { api, wsUrl } from "@/lib/api";
 import { useWorkspace } from "@/stores/workspace";
 import { useRecommendations } from "@/stores/recommendations";
 import { useSettings } from "@/stores/settings";
+import { useSessions } from "@/stores/sessions";
+import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 import type { LivePrice } from "@/lib/types";
 
 const ChartCanvas = dynamic(() => import("./ChartCanvas"), { ssr: false });
 
 export function Workstation() {
-  const viewMode = useWorkspace((s) => s.viewMode);
+  const section = useUi((s) => s.section);
+  const chartOpen = useWorkspace((s) => s.chartOpen);
+  const setChartOpen = useWorkspace((s) => s.setChartOpen);
   const setPrice = useWorkspace((s) => s.setPrice);
   const setDataMode = useWorkspace((s) => s.setDataMode);
   const hydrate = useRecommendations((s) => s.hydrate);
   const markFromPrice = useRecommendations((s) => s.markFromPrice);
   const loadSettings = useSettings((s) => s.load);
+  const hydrateSessions = useSessions((s) => s.hydrate);
 
   useEffect(() => {
+    hydrateSessions();
     void hydrate();
     void loadSettings()
       .then(() => {
@@ -35,7 +42,7 @@ export function Workstation() {
       .health()
       .then((h) => setDataMode(h.dataMode as "oanda" | "simulator"))
       .catch(() => undefined);
-  }, [hydrate, loadSettings, setDataMode]);
+  }, [hydrate, hydrateSessions, loadSettings, setDataMode]);
 
   useEffect(() => {
     let stop = false;
@@ -84,39 +91,38 @@ export function Workstation() {
   }, [markFromPrice, setPrice]);
 
   return (
-    <div className="flex h-screen min-h-0 flex-col gap-3 p-3">
-      <HeaderBar />
-      <div
-        className={cn(
-          "grid min-h-0 flex-1 gap-3",
-          viewMode === "split" && "grid-cols-1 xl:grid-cols-[minmax(0,1.65fr)_minmax(360px,0.95fr)]",
-          viewMode === "chart" && "grid-cols-1",
-          viewMode === "chat" && "grid-cols-1"
-        )}
-      >
-        {viewMode !== "chat" && (
-          <div className="glass relative min-h-[320px] overflow-hidden rounded-2xl">
-            <ChartCanvas className="absolute inset-0" />
-            <div className="pointer-events-none absolute left-4 top-3 text-[10px] uppercase tracking-[0.2em] text-slate-500">
-              klinecharts-pro engine · OANDA / simulator feed
+    <div className="relative flex h-dvh overflow-hidden bg-background lg:flex-row" dir="rtl">
+      <Sidebar />
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+        <TopBar />
+        <main className="aichart-scroll flex min-h-0 flex-1 flex-col overflow-hidden">
+          {section === "chat" && (
+            <div className="flex min-h-0 flex-1 flex-col xl:flex-row">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <ChatPanel />
+              </div>
+              {chartOpen && (
+                <div className="hidden min-h-0 w-[min(52%,40rem)] shrink-0 border-s border-border xl:block">
+                  <ChartCanvas className="h-full w-full" />
+                </div>
+              )}
+              {chartOpen && (
+                <div className="xl:hidden">
+                  <button type="button" className="absolute inset-0 z-30 bg-black/50" aria-label="إغلاق الشارت" onClick={() => setChartOpen(false)} />
+                  <div className="absolute inset-x-0 bottom-0 z-40 h-[72dvh] overflow-hidden rounded-t-2xl border-t border-border bg-background shadow-xl">
+                    <div className="flex h-10 items-center justify-center">
+                      <span className="h-1 w-10 rounded-full bg-muted-foreground/40" />
+                    </div>
+                    <ChartCanvas className="h-[calc(72dvh-2.5rem)] w-full" />
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        )}
-        {viewMode !== "chart" && (
-          <div
-            className={cn(
-              "grid min-h-0 gap-3",
-              viewMode === "chat"
-                ? "grid-cols-1 lg:grid-cols-2"
-                : "grid-rows-[minmax(0,1.15fr)_minmax(220px,0.85fr)]"
-            )}
-          >
-            <AgentConsole />
-            <RecommendationsLedger />
-          </div>
-        )}
+          )}
+          {section === "recommendations" && <RecommendationsPage />}
+          {section === "settings" && <SettingsPanel />}
+        </main>
       </div>
-      <SettingsDrawer />
     </div>
   );
 }

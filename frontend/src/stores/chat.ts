@@ -28,17 +28,12 @@ type ChatState = {
   addThought: (text: string) => void;
   complete: () => void;
   resetPhases: () => void;
+  loadMessages: (messages: ChatMessage[]) => void;
+  clearChat: () => void;
 };
 
 export const useChat = create<ChatState>((set) => ({
-  messages: [
-    {
-      id: "sys_welcome",
-      role: "system",
-      text: "FoxAgent online. Multi-timeframe ICT desk is armed. Pick a pair, then /scan or Generate Setup.",
-      createdAt: Date.now(),
-    },
-  ],
+  messages: [],
   phases: IDLE_PHASES,
   streaming: false,
   model: MODELS[0].id,
@@ -100,4 +95,6 @@ export const useChat = create<ChatState>((set) => ({
       phases: s.phases.map((p) => (p.status === "active" ? { ...p, status: "complete" } : p)),
     })),
   resetPhases: () => set({ phases: IDLE_PHASES, thoughts: [] }),
+  loadMessages: (messages) => set({ messages, streaming: false, thoughts: [], phases: IDLE_PHASES }),
+  clearChat: () => set({ messages: [], streaming: false, thoughts: [], phases: IDLE_PHASES, runId: null }),
 }));
