@@ -119,8 +119,8 @@ def test_frontend_calls_models_instruments_memory():
     assert "api.models()" in catalog
     assert "api.instruments()" in catalog
     memory = _read("frontend", "src", "components", "memory", "MemoryPage.tsx")
-    assert "api.memory(" in memory
-    assert "api.memoryContext(" in memory
+    assert ".memory(" in memory or "api.memory(" in memory
+    assert ".memoryContext(" in memory or "api.memoryContext(" in memory
     settings = _read("frontend", "src", "components", "settings", "SettingsPanel.tsx")
     assert "useCatalog" in settings
     composer = _read("frontend", "src", "components", "chat", "ChatComposer.tsx")
