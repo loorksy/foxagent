@@ -24,6 +24,8 @@ const NAV: { href: string; match: string; labelKey: MessageKey; icon: typeof Mes
 function NavList({ iconOnly, onNavigate }: { iconOnly: boolean; onNavigate?: () => void }) {
   const pathname = usePathname() || "/";
   const activeId = useSessions((s) => s.activeId);
+  const hasArtifacts = useChat((s) => s.artifacts.length > 0);
+  const artifactsOpen = useChat((s) => s.artifactsOpen);
   const t = useT();
   return (
     <nav className="flex shrink-0 flex-col gap-0.5 px-2 py-2" aria-label={t("nav.aria")}>
@@ -51,22 +53,25 @@ function NavList({ iconOnly, onNavigate }: { iconOnly: boolean; onNavigate?: () 
           </Link>
         );
       })}
-      <button
-        type="button"
-        onClick={() => {
-          useChat.getState().setArtifactsOpen(!useChat.getState().artifactsOpen);
-          onNavigate?.();
-        }}
-        title={iconOnly ? t("artifacts.open") : undefined}
-        className={cn(
-          "relative flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground lg:min-h-10",
-          FOCUS,
-          iconOnly && "justify-center px-0"
-        )}
-      >
-        <FileStack className={cn("shrink-0", iconOnly ? "h-5 w-5" : "h-4 w-4")} />
-        {!iconOnly && <span className="truncate">{t("artifacts.open")}</span>}
-      </button>
+      {hasArtifacts && (
+        <button
+          type="button"
+          onClick={() => {
+            useChat.getState().setArtifactsOpen(!useChat.getState().artifactsOpen);
+            onNavigate?.();
+          }}
+          title={iconOnly ? t("artifacts.open") : undefined}
+          className={cn(
+            "relative flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground lg:min-h-10",
+            FOCUS,
+            iconOnly && "justify-center px-0",
+            artifactsOpen && "bg-[var(--sidebar-active-bg)] text-foreground"
+          )}
+        >
+          <FileStack className={cn("shrink-0", iconOnly ? "h-5 w-5" : "h-4 w-4")} />
+          {!iconOnly && <span className="truncate">{t("artifacts.open")}</span>}
+        </button>
+      )}
     </nav>
   );
 }

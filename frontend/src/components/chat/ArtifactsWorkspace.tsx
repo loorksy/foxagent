@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Check, Copy, Download, X } from "lucide-react";
+import { Check, Copy, Download, FileStack, X } from "lucide-react";
 import { useChat } from "@/stores/chat";
 import { cn } from "@/lib/utils";
 import { previewKind, toCsv, parseCsv } from "@/lib/antArtifact";
@@ -45,6 +45,34 @@ export function ArtifactsWorkspace() {
 
   if (!open) return null;
 
+  if (artifacts.length === 0) {
+    return (
+      <>
+        <button
+          type="button"
+          className="absolute inset-0 z-30 bg-black/50 xl:hidden"
+          aria-label={t("artifacts.close")}
+          onClick={() => setOpen(false)}
+        />
+        <aside
+          className="relative z-40 flex h-full min-w-0 shrink-0 flex-col border-s border-border bg-card max-xl:absolute max-xl:inset-x-0 max-xl:bottom-0 max-xl:h-[78dvh] max-xl:rounded-t-2xl max-xl:border-s-0 max-xl:border-t max-xl:shadow-xl"
+          style={{ width }}
+        >
+          <div className="flex h-12 items-center justify-between border-b border-border px-3">
+            <p className="text-sm font-medium">{t("artifacts.title")}</p>
+            <button type="button" className="rounded-md p-1 text-muted-foreground hover:bg-muted" onClick={() => setOpen(false)} aria-label={t("artifacts.close")}>
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+            <FileStack className="h-8 w-8 text-muted-foreground/40" aria-hidden />
+            <p className="max-w-xs text-sm text-muted-foreground">{t("artifacts.empty")}</p>
+          </div>
+        </aside>
+      </>
+    );
+  }
+
   function exportName() {
     const base = (active?.title || "artifact").replace(/\s+/g, "-");
     if (kind === "csv") return `${base}.csv`;
@@ -69,7 +97,6 @@ export function ArtifactsWorkspace() {
       </div>
       <div className="flex min-h-0 flex-1">
         <ul className="fox-scroll w-36 shrink-0 overflow-y-auto border-e border-border p-2">
-          {artifacts.length === 0 && <li className="px-1 py-2 text-[11px] text-muted-foreground">{t("artifacts.empty")}</li>}
           {artifacts.map((art) => (
             <li key={art.id}>
               <button
