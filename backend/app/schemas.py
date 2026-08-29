@@ -215,13 +215,6 @@ class SettingsPublic(BaseModel):
     telegramConfigured: bool = False
 
 
-class AgentPhase(BaseModel):
-    id: int
-    name: str
-    detail: str
-    status: Literal["pending", "active", "complete", "error"] = "pending"
-
-
 class WsEvent(BaseModel):
     type: str
     payload: dict[str, Any] = Field(default_factory=dict)

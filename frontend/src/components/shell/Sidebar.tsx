@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileStack, LineChart, MessageSquareText, PanelLeft, PanelLeftClose, Settings, X } from "lucide-react";
+import { Brain, FileStack, LineChart, MessageSquareText, PanelLeft, PanelLeftClose, Settings, X } from "lucide-react";
 import { FoxLogo } from "./FoxLogo";
 import { Conversations } from "./Conversations";
 import { useUi } from "@/stores/ui";
@@ -17,6 +17,7 @@ const FOCUS =
 const NAV: { href: string; match: string; labelKey: MessageKey; icon: typeof MessageSquareText }[] = [
   { href: "/agents", match: "/agents", labelKey: "nav.chat", icon: MessageSquareText },
   { href: "/recommendations", match: "/recommendations", labelKey: "nav.recommendations", icon: LineChart },
+  { href: "/memory", match: "/memory", labelKey: "nav.memory", icon: Brain },
   { href: "/settings", match: "/settings", labelKey: "nav.settings", icon: Settings },
 ];
 

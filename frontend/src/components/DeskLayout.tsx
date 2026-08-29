@@ -8,8 +8,10 @@ import { TopBar } from "./shell/TopBar";
 import { ChatPanel } from "./chat/ChatPanel";
 import { RecommendationsPage } from "./recs/RecommendationsPage";
 import { SettingsPanel } from "./settings/SettingsPanel";
+import { MemoryPage } from "./memory/MemoryPage";
 import { api, wsUrl } from "@/lib/api";
 import { useWorkspace } from "@/stores/workspace";
+import { useCatalog } from "@/stores/catalog";
 import { useRecommendations } from "@/stores/recommendations";
 import { useSettings } from "@/stores/settings";
 import { useSessions } from "@/stores/sessions";
@@ -32,6 +34,7 @@ export function DeskLayout({ children }: { children?: React.ReactNode }) {
   const setDataMode = useWorkspace((s) => s.setDataMode);
   const hydrate = useRecommendations((s) => s.hydrate);
   const markFromPrice = useRecommendations((s) => s.markFromPrice);
+  const loadCatalog = useCatalog((s) => s.load);
   const loadSettings = useSettings((s) => s.load);
   const hydrateSessions = useSessions((s) => s.hydrate);
   const setArtifactsOpen = useChat((s) => s.setArtifactsOpen);
@@ -44,7 +47,9 @@ export function DeskLayout({ children }: { children?: React.ReactNode }) {
       ? "settings"
       : pathname.startsWith("/recommendations")
         ? "recommendations"
-        : "chat";
+        : pathname.startsWith("/memory")
+          ? "memory"
+          : "chat";
 
   useEffect(() => {
     useUi.setState({ section });
@@ -59,6 +64,7 @@ export function DeskLayout({ children }: { children?: React.ReactNode }) {
   useEffect(() => {
     void hydrateSessions();
     void hydrate();
+    void loadCatalog();
     void loadSettings()
       .then(() => {
         const pub = useSettings.getState().public;
@@ -69,7 +75,7 @@ export function DeskLayout({ children }: { children?: React.ReactNode }) {
       .health()
       .then((h) => setDataMode(h.dataMode as "oanda" | "simulator"))
       .catch(() => undefined);
-  }, [hydrate, hydrateSessions, loadSettings, setDataMode]);
+  }, [hydrate, hydrateSessions, loadCatalog, loadSettings, setDataMode]);
 
   useEffect(() => {
     let stop = false;
@@ -148,6 +154,7 @@ export function DeskLayout({ children }: { children?: React.ReactNode }) {
             </div>
           )}
           {section === "recommendations" && (children || <RecommendationsPage />)}
+          {section === "memory" && (children || <MemoryPage />)}
           {section === "settings" && (children || <SettingsPanel />)}
         </main>
       </div>

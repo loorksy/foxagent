@@ -18,7 +18,13 @@ export function TopBar() {
   const mobileOpen = useUi((s) => s.mobileOpen);
   const setMobileOpen = useUi((s) => s.setMobileOpen);
   const pathname = usePathname() || "/";
-  const section = pathname.startsWith("/settings") ? "settings" : pathname.startsWith("/recommendations") ? "recommendations" : "chat";
+  const section = pathname.startsWith("/settings")
+    ? "settings"
+    : pathname.startsWith("/recommendations")
+      ? "recommendations"
+      : pathname.startsWith("/memory")
+        ? "memory"
+        : "chat";
   const artifactsOpen = useChat((s) => s.artifactsOpen);
   const setArtifactsOpen = useChat((s) => s.setArtifactsOpen);
   const toggleChart = useWorkspace((s) => s.toggleChart);

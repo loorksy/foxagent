@@ -89,8 +89,3 @@ export function recStatusKey(status: string): MessageKey {
   const key = `rec.status.${status}` as MessageKey;
   return key in ar ? key : "rec.status.PENDING";
 }
-
-export function phaseNameKey(id: number): MessageKey {
-  const key = `phase.${id}.name` as MessageKey;
-  return key in ar ? key : "chat.thinking";
-}

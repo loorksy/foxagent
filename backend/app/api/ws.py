@@ -47,13 +47,11 @@ class Hub:
 
 
 market_hub = Hub()
-agent_hub = Hub()
 
 
 async def emit_agent(event: str, payload: dict[str, Any]) -> None:
-    msg = {"type": event, "payload": payload}
-    await agent_hub.broadcast(msg)
-    await bus.publish("agent", msg)
+    # SSE is the UI transport. Keep a bus publish for optional subscribers.
+    await bus.publish("agent", {"type": event, "payload": payload})
 
 
 async def emit_tick(price: LivePrice) -> None:
@@ -104,15 +102,3 @@ async def market_ws(ws: WebSocket) -> None:
         await market_hub.remove(ws)
 
 
-@router.websocket("/ws/agent")
-async def agent_ws(ws: WebSocket) -> None:
-    if not await _accept_authenticated(ws):
-        return
-    await agent_hub.add(ws)
-    try:
-        while True:
-            await ws.receive_text()
-    except WebSocketDisconnect:
-        pass
-    finally:
-        await agent_hub.remove(ws)

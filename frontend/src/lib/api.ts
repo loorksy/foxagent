@@ -1,4 +1,14 @@
-import type { AgentSession, KLineBar, SettingsPayload, SettingsPublic, TradeRecommendation } from "./types";
+import type {
+  AgentSession,
+  Instrument,
+  KLineBar,
+  MemoryEntry,
+  ModelOption,
+  SettingsPayload,
+  SettingsPublic,
+  StructureScan,
+  TradeRecommendation,
+} from "./types";
 
 const API = "";
 
@@ -45,6 +55,16 @@ export const api = {
     }>("/api/health"),
   candles: (instrument: string, granularity: string, count = 400) =>
     http<{ candles: KLineBar[] }>(`/api/candles?instrument=${instrument}&granularity=${granularity}&count=${count}`),
+  instruments: () => http<{ instruments: Instrument[] }>("/api/instruments"),
+  models: () => http<{ models: ModelOption[] }>("/api/models"),
+  structure: (instrument: string, granularity: string, count = 300) =>
+    http<StructureScan>(`/api/structure?instrument=${instrument}&granularity=${granularity}&count=${count}`),
+  memory: (symbol?: string) =>
+    http<{ entries: MemoryEntry[] }>(`/api/memory${symbol ? `?symbol=${encodeURIComponent(symbol)}` : ""}`),
+  memoryContext: (symbol: string, query = "") =>
+    http<{ symbol: string; context: string }>(
+      `/api/memory/context?symbol=${encodeURIComponent(symbol)}&query=${encodeURIComponent(query)}`
+    ),
   recommendations: () => http<{ recommendations: TradeRecommendation[] }>("/api/recommendations"),
   settings: () => http<SettingsPublic>("/api/settings"),
   saveSettings: (body: SettingsPayload) =>

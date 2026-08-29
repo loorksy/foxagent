@@ -1,11 +1,44 @@
-import { MODELS, parsePairShortcut } from "@/lib/constants";
+import { MODELS, QUICK_PROMPTS, parsePairShortcut } from "@/lib/constants";
 import { api } from "@/lib/api";
 import { useWorkspace } from "@/stores/workspace";
 import { useChat } from "@/stores/chat";
+import { useCatalog } from "@/stores/catalog";
 import { useRecommendations } from "@/stores/recommendations";
 import { useSessions } from "@/stores/sessions";
-import type { Artifact, TradeRecommendation } from "@/lib/types";
+import type { Artifact, KlineOverlay, StructureScan, TradeRecommendation } from "@/lib/types";
 import { t } from "@/i18n";
+
+const SETUP_PROMPT = QUICK_PROMPTS.find((q) => q.id === "setup")?.prompt || "Generate a complete ICT trade setup.";
+
+function formatStructure(symbol: string, tf: string, data: StructureScan): string {
+  const lines = [
+    t("chat.scanTitle", { symbol, tf }),
+    t("chat.scanBias", { bias: data.bias || "—" }),
+    `BOS: ${data.lastBos || "—"}`,
+    `FVG: ${data.fvgCount ?? 0}`,
+    `Order blocks: ${data.orderBlocks ?? 0}`,
+    `Sweep: ${data.liquiditySweep || "—"}`,
+  ];
+  if (data.confluence?.length) {
+    lines.push(`Confluence: ${data.confluence.join("; ")}`);
+  }
+  return lines.join("\n");
+}
+
+function fvgOverlays(data: StructureScan): KlineOverlay[] {
+  return (data.fvgs || []).map((fvg, index) => ({
+    name: "rect",
+    id: `scan-fvg-${index}`,
+    points: [
+      { timestamp: fvg.timestampStart, value: fvg.high },
+      { timestamp: fvg.timestampEnd, value: fvg.low },
+    ],
+    styles: {
+      fillColor: fvg.direction === "bullish" ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
+      borderColor: fvg.direction === "bullish" ? "#22c55e" : "#ef4444",
+    },
+  }));
+}
 
 export async function sendAgentMessage(raw: string) {
   const text = raw.trim();
@@ -14,6 +47,7 @@ export async function sendAgentMessage(raw: string) {
 
   const workspace = useWorkspace.getState();
   const chat = useChat.getState();
+  let message = text;
 
   if (text.startsWith("/")) {
     const [cmd, ...rest] = text.slice(1).split(/\s+/);
@@ -28,7 +62,8 @@ export async function sendAgentMessage(raw: string) {
       return;
     }
     if (cmd === "model") {
-      const hit = MODELS.find((m) => m.id.includes(arg) || m.label.toLowerCase().includes(arg.toLowerCase()));
+      const models = useCatalog.getState().models.length ? useCatalog.getState().models : MODELS;
+      const hit = models.find((m) => m.id.includes(arg) || m.label.toLowerCase().includes(arg.toLowerCase()));
       if (hit) chat.setModel(hit.id);
       return;
     }
@@ -36,16 +71,33 @@ export async function sendAgentMessage(raw: string) {
       workspace.clearOverlays();
       return;
     }
+    if (cmd === "scan") {
+      const parsed = parsePairShortcut(arg) || workspace.symbol;
+      if (parsed !== workspace.symbol) workspace.setSymbol(parsed);
+      chat.pushUser(text);
+      try {
+        const data = await api.structure(parsed, workspace.period.granularity);
+        chat.appendAssistant(formatStructure(parsed, workspace.period.text, data));
+        const overlays = fvgOverlays(data);
+        if (overlays.length) workspace.applyToChart(overlays);
+      } catch (err) {
+        chat.appendAssistant(err instanceof Error ? err.message : t("chat.scanFailed"));
+      }
+      return;
+    }
+    if (cmd === "setup") {
+      message = arg || SETUP_PROMPT;
+    }
   }
 
-  chat.pushUser(text);
+  chat.pushUser(message);
   chat.startRun(`local_${Date.now()}`);
   const controller = new AbortController();
   useChat.setState({ abort: controller });
   try {
     await api.streamChat(
       {
-        message: text,
+        message,
         symbol: workspace.symbol,
         timeframe: workspace.period.text,
         model: useChat.getState().model,

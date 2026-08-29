@@ -31,7 +31,7 @@ export const MODELS: ModelOption[] = [
 
 export const QUICK_PROMPTS = [
   { id: "liquidity15m" as const, prompt: "Analyze 15m liquidity pools, session highs/lows, and any sweep. Map FVG and give a setup if R:R >= 1:2." },
-  { id: "fvgScan" as const, prompt: "/scan Focus on unfilled fair value gaps aligned with HTF bias. Overlay zones." },
+  { id: "fvgScan" as const, prompt: "/scan" },
   { id: "setup" as const, prompt: "Generate a complete ICT trade setup with entry, SL, TP1, TP2 and klineOverlays for the current pair." },
 ];
 

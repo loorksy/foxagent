@@ -31,6 +31,7 @@ const ChartCanvas = forwardRef<ChartHandle, Props>(function ChartCanvas({ classN
   const barsRef = useRef<KLineBar[]>([]);
   const symbol = useWorkspace((s) => s.symbol);
   const period = useWorkspace((s) => s.period);
+  const chartNonce = useWorkspace((s) => s.chartNonce);
   const command = useWorkspace((s) => s.command);
   const prices = useWorkspace((s) => s.prices);
 
@@ -105,7 +106,7 @@ const ChartCanvas = forwardRef<ChartHandle, Props>(function ChartCanvas({ classN
       }
       chartRef.current = null;
     };
-  }, [symbol, period.granularity]);
+  }, [symbol, period.granularity, chartNonce]);
 
   useEffect(() => {
     const chart = chartRef.current;

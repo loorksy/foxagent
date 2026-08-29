@@ -90,11 +90,38 @@ export type ChatMessage = {
   streaming?: boolean;
 };
 
-export type AgentPhase = {
-  id: number;
-  name: string;
-  detail: string;
-  status: "pending" | "active" | "complete" | "error";
+export type StructureFvg = {
+  direction: string;
+  low: number;
+  high: number;
+  timestampStart: number;
+  timestampEnd: number;
+};
+
+export type StructureScan = {
+  bias?: string;
+  lastBos?: string | null;
+  fvgCount?: number;
+  orderBlocks?: number;
+  liquiditySweep?: string | null;
+  asianHigh?: number;
+  asianLow?: number;
+  confluence?: string[];
+  fvgs?: StructureFvg[];
+};
+
+export type MemoryEntry = {
+  id: string;
+  symbol: string;
+  kind: string;
+  status: string;
+  decision: string;
+  reflection?: string;
+  rating?: string;
+  recommendationId?: string;
+  outcome?: string;
+  pnl?: number;
+  createdAt?: string | null;
 };
 
 export type RunThought = {

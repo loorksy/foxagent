@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { Eye, EyeOff, Send } from "lucide-react";
 import { useSettings } from "@/stores/settings";
-import { MODELS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
+import { useCatalog } from "@/stores/catalog";
 import { LOCALE_IDS, useLocale, useT, type LocaleId, type MessageKey } from "@/i18n";
 
 function Field({
@@ -56,9 +56,11 @@ export function SettingsPanel() {
   const t = useT();
   const [probe, setProbe] = useState<{ ready?: boolean; configured?: boolean; keyValid?: boolean; detail?: string }>({});
   const [paused, setPaused] = useState(false);
+  const models = useCatalog((s) => s.models);
 
   useEffect(() => {
     void load().catch(() => undefined);
+    void useCatalog.getState().load();
     void api
       .health()
       .then((h) =>
@@ -131,7 +133,7 @@ export function SettingsPanel() {
               onChange={(e) => patchForm({ defaultClaudeModel: e.target.value })}
               className="w-full rounded-lg border border-border bg-input px-3 py-2 text-sm"
             >
-              {MODELS.map((m) => (
+              {models.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label}
                 </option>

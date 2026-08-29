@@ -7,11 +7,9 @@ from fastapi import APIRouter, Body, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.config import get_settings
-from app.db import get_recommendation, list_recommendations, update_recommendation
-from app.services.mcp_tools import persist_recommendation
-from app.services.risk_rules import RiskRejected
+from app.db import list_recommendations, update_recommendation
 from app.services.run_control import is_paused, request_cancel, set_paused
-from app.schemas import CandleRequest, ChatRequest, SessionCreate, SessionUpdate, SettingsPayload, TradeRecommendation
+from app.schemas import ChatRequest, SessionCreate, SessionUpdate, SettingsPayload
 from app.services.agent import run_chat
 from app.services.memory_log import TERMINAL_STATUSES, get_past_context, list_entries
 from app.services.reflection import write_reflection
@@ -24,7 +22,6 @@ from app.services.session_store import (
     save_session,
 )
 from app.services.analysis import analyze_structure, structure_summary
-from app.services.chart_capture import render_candles_b64
 from app.services.oanda import oanda
 from app.services.settings_store import (
     load_runtime_settings,
@@ -86,17 +83,6 @@ async def candles(instrument: str = "XAU_USD", granularity: str = "M15", count: 
     }
 
 
-@router.post("/candles")
-async def candles_post(body: CandleRequest) -> dict:
-    return await candles(body.instrument, body.granularity, body.count)
-
-
-@router.get("/price")
-async def price(instrument: str = "XAU_USD") -> dict:
-    px = await oanda.get_live_price(instrument)
-    return px.model_dump(mode="json")
-
-
 @router.get("/prices")
 async def prices() -> dict:
     from app.services.simulator import INSTRUMENT_SPECS
@@ -114,32 +100,9 @@ async def structure(instrument: str = "XAU_USD", granularity: str = "M15", count
     return structure_summary(analyze_structure(data))
 
 
-@router.get("/chart-snapshot")
-async def chart_snapshot(instrument: str = "XAU_USD", granularity: str = "M15") -> dict:
-    data = await oanda.get_candles(instrument, granularity, 180)
-    return {"image": render_candles_b64(data, f"{instrument} {granularity}"), "mime": "image/png"}
-
-
 @router.get("/recommendations")
 async def recs() -> dict:
     return {"recommendations": await list_recommendations(200)}
-
-
-@router.get("/recommendations/{rec_id}")
-async def rec_one(rec_id: str) -> dict:
-    item = await get_recommendation(rec_id)
-    if not item:
-        raise HTTPException(404, "Not found")
-    return item
-
-
-@router.post("/recommendations")
-async def rec_create(body: TradeRecommendation) -> dict:
-    try:
-        result = await persist_recommendation(body.model_dump(mode="json"), emit_agent)
-    except RiskRejected as exc:
-        raise HTTPException(400, {"detail": "Risk gate rejected", "reasons": exc.result.get("reasons"), "gate": exc.result}) from exc
-    return result["recommendation"]
 
 
 @router.patch("/recommendations/{rec_id}")

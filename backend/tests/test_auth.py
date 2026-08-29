@@ -16,8 +16,6 @@ DUMMY = {
 
 # Bodies so authenticated calls get past request parsing after the auth gate.
 BODIES = {
-    ("POST", "/api/candles"): {"instrument": "XAU_USD", "granularity": "M15", "count": 10},
-    ("POST", "/api/recommendations"): None,
     ("PATCH", "/api/recommendations/{rec_id}"): {"status": "CANCELLED"},
     ("POST", "/api/sessions"): {"symbol": "XAU_USD", "timeframe": "15m"},
     ("PUT", "/api/sessions/{session_id}"): {"title": "desk"},
@@ -119,14 +117,12 @@ def test_wrong_password_is_rejected(client):
     assert resp.status_code == 401
 
 
-def test_ws_market_and_agent_reject_without_token(client):
-    for path in ("/ws/market", "/ws/agent"):
-        with pytest.raises(WebSocketDisconnect):
-            with client.websocket_connect(path):
-                pass
+def test_ws_market_rejects_without_token(client):
+    with pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect("/ws/market"):
+            pass
 
 
-def test_ws_market_and_agent_accept_valid_token(client, auth_header):
-    for path in ("/ws/market", "/ws/agent"):
-        with client.websocket_connect(path, headers=auth_header) as ws:
-            ws.send_text("ping")
+def test_ws_market_accepts_valid_token(client, auth_header):
+    with client.websocket_connect("/ws/market", headers=auth_header) as ws:
+        ws.send_text("ping")

@@ -2,11 +2,12 @@
 
 import { FormEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, Square } from "lucide-react";
-import { DEFAULT_INSTRUMENTS, MODELS, QUICK_PROMPTS, SLASH_COMMANDS } from "@/lib/constants";
+import { QUICK_PROMPTS, SLASH_COMMANDS } from "@/lib/constants";
 import { sendAgentMessage } from "@/lib/agentSend";
 import { api } from "@/lib/api";
 import { useChat } from "@/stores/chat";
 import { useWorkspace } from "@/stores/workspace";
+import { useCatalog } from "@/stores/catalog";
 import { cn } from "@/lib/utils";
 import { useT, type MessageKey } from "@/i18n";
 
@@ -20,6 +21,8 @@ export function ChatComposer({ hero = false }: { hero?: boolean }) {
   const setSymbol = useWorkspace((s) => s.setSymbol);
   const period = useWorkspace((s) => s.period);
   const setTimeframe = useWorkspace((s) => s.setTimeframe);
+  const models = useCatalog((s) => s.models);
+  const instruments = useCatalog((s) => s.instruments);
   const t = useT();
   const slashOpen = value.startsWith("/");
   const slashQuery = value.slice(1).toLowerCase();
@@ -96,7 +99,7 @@ export function ChatComposer({ hero = false }: { hero?: boolean }) {
               onChange={(e) => setSymbol(e.target.value)}
               className="max-w-28 truncate rounded-full border border-border bg-transparent px-2 py-1 text-[11px] font-medium"
             >
-              {DEFAULT_INSTRUMENTS.map((i) => (
+              {instruments.map((i) => (
                 <option key={i.ticker} value={i.ticker}>
                   {i.display}
                 </option>
@@ -118,7 +121,7 @@ export function ChatComposer({ hero = false }: { hero?: boolean }) {
               onChange={(e) => setModel(e.target.value)}
               className="max-w-40 truncate rounded-full border border-border bg-transparent px-2 py-1 text-[11px] font-medium"
             >
-              {MODELS.map((m) => (
+              {models.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label}
                 </option>
