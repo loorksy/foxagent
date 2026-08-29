@@ -6,4 +6,4 @@
 - [x] Task 4: Technical / Fundamental / Risk agents with real CoT + tools
 - [x] Task 5: Artifacts stream + workspace panel
 - [x] Task 6: Frontend streaming of thoughts, tools, debate (no fake placeholders)
-- [ ] Task 7: pytest + deploy
+- [x] Task 7: pytest + deploy
