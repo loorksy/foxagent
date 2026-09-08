@@ -1,8 +1,8 @@
 # دليل باك تست الذهب / Gold backtest guide
 
-Deterministic replay of the five ICT gold rules on `gold_candles` (M15 / H1 / H4 / D). **No LLM. No network. No broker orders.**
+Deterministic replay of **active** `StrategyLibrary` rules on `gold_candles` (M15 / H1 / H4 / D). **No LLM. No network. No broker orders.**
 
-محاكاة حتمية لقواعد الذهب الخمس على المستودع فقط. لا نموذج لغوي، لا شبكة، لا أوامر وساطة.
+محاكاة حتمية لقواعد المكتبة النشطة على المستودع فقط. لا نموذج لغوي، لا شبكة، لا أوامر وساطة. Custom drafts must pass Strategy Lab validation before they appear here.
 
 ---
 

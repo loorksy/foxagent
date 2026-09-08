@@ -175,6 +175,15 @@ export async function sendAgentMessage(raw: string) {
         if (type === "cancelled") {
           useChat.getState().appendAssistant(t("chat.cancelled"));
         }
+        if (type === "strategy_proposal" && p.id) {
+          useChat.getState().attachStrategyProposal(p as unknown as import("@/lib/types").StrategyRule);
+        }
+        if (type === "strategy_validation") {
+          useChat.getState().attachStrategyValidation(p as unknown as import("@/lib/types").StrategyValidation);
+          if (p.strategy && typeof p.strategy === "object") {
+            useChat.getState().attachStrategyProposal(p.strategy as import("@/lib/types").StrategyRule);
+          }
+        }
       },
       controller.signal
     );

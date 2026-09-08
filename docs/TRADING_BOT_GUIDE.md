@@ -10,7 +10,7 @@ FoxAgent's gold bot is a **signal desk**, not a broker. It watches **XAU_USD onl
 
 | Agent | Arabic | What it does |
 | --- | --- | --- |
-| `multi_strategy` | الاستراتيجيات المتعددة | Scans five ICT gold plays on M1–H4 |
+| `multi_strategy` | الاستراتيجيات المتعددة | Scans **active** library strategies (5 builtins + approved custom) |
 | `pattern_notes` | ملاحظات الأنماط | Detects ten candlestick notes and scores them from `pattern_memory` |
 | `news_candle` | شمعة الأخبار | Times entries around real USD prints (NFP, CPI, FOMC, …) |
 
@@ -19,6 +19,12 @@ The coordinator (`TradingBotCoordinator`) runs them about every `botScanInterval
 المنسّق يشغّلهم كل `botScanInterval` ثانية. **Pause يوقف الحلقة.** Resume يعيد التشغيل فقط إن كان البوت مفعّلاً.
 
 ---
+
+The gold bot and the backtest engine read strategies from **one** `StrategyLibrary`. Claude can propose drafts via `propose_strategy`; the operator validates them on two years of warehouse candles. Rejected rows stay with a reason. Built-ins are never deleted.
+
+البوت والباك تست يقرآن من **مكتبة واحدة**. Claude يقترح مسودات؛ المشغّل يتحقق عبر باك تست سنتين. الرفض لا يحذف الصف. المدمج لا يُحذف.
+
+واجهة المختبر: `/strategy-lab`. REST: `/api/strategies`.
 
 ## خمس استراتيجيات ذهب / Five gold strategies
 

@@ -463,7 +463,7 @@ await emit("recommendation", dumped)
 | الوكيل | الملف | المحتوى |
 | --- | --- | --- |
 | المنسّق | `trading_bot/coordinator.py` | حلقة 60ث، Pause يوقفها، `botEnabled` يشغّلها |
-| متعدد الاستراتيجيات | `multi_strategy_agent.py` | 5 استراتيجيات ICT على الذهب |
+| متعدد الاستراتيجيات | `multi_strategy_agent.py` | يقرأ الاستراتيجيات النشطة من `StrategyLibrary` فقط |
 | الأنماط | `pattern_notes_agent.py` | 10 أنماط شموع + `pattern_memory` |
 | شمعة الخبر | `news_candle_agent.py` | 4 توقيتات حول أحداث USD |
 
@@ -873,7 +873,8 @@ erDiagram
 - `/calendar`: جدول أحداث USD، تلوين الأثر (أحمر/برتقالي/أصفر)، عدّاد للحدث التالي، سهم أثر الذهب.
 - `/bot`: تشغيل/إيقاف، بطاقات الوكلاء الثلاثة، اختيار الاستراتيجيات، الإشارات الحيّة، زر «تحويل لتوصية»، والتقويم المضمّن.
 - `/backtest`: تشغيل باك تست حتمي، ملخص R، منحنى تراكمي، مقارنة الاستراتيجيات.
-- الشريط الجانبي: «التقويم» و«البوت» و«الباك تست».
+- `/strategy-lab`: مكتبة الاستراتيجيات الموحّدة (مدمجة + مقترحات Claude + يدوية)، تحقق باك تست، اعتماد/رفض.
+- الشريط الجانبي: «التقويم» و«البوت» و«الباك تست» و«مختبر الاستراتيجيات».
 
 ### 7.5 الإعدادات (`/settings`)
 
@@ -1022,7 +1023,23 @@ cd frontend && npx vitest run
 
 ### 10.3 Backtesting
 
-محرّك حتمي في `backend/app/services/backtest/`. يقرأ `gold_candles` فقط (M15/H1/H4/D) ويعيد تشغيل قواعد الاستراتيجيات الخمس شمعة-شمعة **بدون** Claude أو OANDA أو تنفيذ أوامر.
+محرّك حتمي في `backend/app/services/backtest/`. يقرأ `gold_candles` فقط (M15/H1/H4/D) ويعيد تشغيل القواعد النشطة من `StrategyLibrary` شمعة-شمعة **بدون** Claude أو OANDA أو تنفيذ أوامر.
+
+### 10.3.1 مختبر الاستراتيجيات
+
+مكتبة واحدة (`strategy_library.py` + جدول `strategies`) هي مصدر الحقيقة للبوت والباك تست.
+
+| الحالة | المعنى |
+| --- | --- |
+| `draft` | مقترح Claude أو إضافة يدوية بانتظار التحقق |
+| `validated` | تجاوزت حدود الباك تست ولم تُعتمد بعد |
+| `active` | يستخدمها البوت الحي |
+| `rejected` | فشلت الحدود أو رفضها المشغّل — الصف يبقى مع السبب |
+| `archived` | مخفاة عن البوت |
+
+الخمس المدمجة (`gold_liquidity_sniper` … `gold_scalp`) دائمة: لا حذف ولا تعديل. لا استراتيجية مخصّصة تصبح `active` قبل باك تست سنتين وتجاوز الحدود (WR ≥ 55%، PF ≥ 1.5، ≥ 50 صفقة، DD ≤ 15R، مجموع R ≥ 10). Pause يوقف التحقق.
+
+أدوات MCP: `propose_strategy` / `validate_strategy` / `list_strategies`. REST تحت `/api/strategies`.
 
 | القاعدة | السلوك |
 | --- | --- |
@@ -1204,11 +1221,11 @@ foxagent/
 │   └── services/
 │       ├── crew.py          الطاقم والنقاش
 │       ├── agent.py         العقد والنماذج
-│       ├── mcp_tools.py     13 أداة (التقويم يضيف events[])
+│       ├── mcp_tools.py     أدوات المكتب + التقويم + مختبر الاستراتيجيات
 │       ├── analysis.py      ICT الحتمي
 │       ├── risk_rules.py    البوابة
 │       ├── economic_calendar.py
-│       ├── trading_bot/     منسّق + 3 وكلاء ذهب
+│       ├── trading_bot/     منسّق + 3 وكلاء ذهب + مكتبة الاستراتيجيات
 │       ├── backtest/        محرّك باك تست حتمي
 │       ├── gold_warehouse.py / gold_sync.py
 │       ├── oanda.py / simulator.py

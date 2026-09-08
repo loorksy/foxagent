@@ -1,25 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useBacktest } from "@/stores/backtest";
+import { useStrategyLab } from "@/stores/strategyLab";
 import { useT, type MessageKey } from "@/i18n";
-
-const STRATEGIES = [
-  "",
-  "gold_liquidity_sniper",
-  "gold_breakout",
-  "gold_trend_follow",
-  "gold_reversal",
-  "gold_scalp",
-];
 
 export function BacktestForm() {
   const run = useBacktest((s) => s.run);
   const running = useBacktest((s) => s.running);
+  const strategies = useStrategyLab((s) => s.items);
+  const loadLab = useStrategyLab((s) => s.load);
   const t = useT();
   const [timeframe, setTimeframe] = useState("M15");
   const [strategyId, setStrategyId] = useState("");
   const [days, setDays] = useState(365);
+
+  useEffect(() => {
+    if (!strategies.length) void loadLab();
+  }, [loadLab, strategies.length]);
+
+  const active = strategies.filter((r) => r.status === "active");
+  const options = active.length
+    ? active
+    : [
+        "gold_liquidity_sniper",
+        "gold_breakout",
+        "gold_trend_follow",
+        "gold_reversal",
+        "gold_scalp",
+      ].map((id) => ({ id, name: id, status: "active" as const }));
 
   return (
     <form
@@ -53,9 +62,10 @@ export function BacktestForm() {
           value={strategyId}
           onChange={(e) => setStrategyId(e.target.value)}
         >
-          {STRATEGIES.map((id) => (
-            <option key={id || "all"} value={id}>
-              {id ? t(`bot.strategy.${id}` as MessageKey) : t("backtest.allStrategies")}
+          <option value="">{t("backtest.allStrategies")}</option>
+          {options.map((rule) => (
+            <option key={rule.id} value={rule.id}>
+              {rule.id.startsWith("gold_") ? t(`bot.strategy.${rule.id}` as MessageKey) : rule.name}
             </option>
           ))}
         </select>

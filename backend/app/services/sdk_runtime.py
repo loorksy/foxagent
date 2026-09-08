@@ -33,6 +33,9 @@ SDK_TOOLS = [
     "mcp__oanda__send_recommendation",
     "mcp__oanda__record_post_trade_reflection",
     "mcp__oanda__draw_on_chart",
+    "mcp__oanda__propose_strategy",
+    "mcp__oanda__validate_strategy",
+    "mcp__oanda__list_strategies",
 ]
 
 

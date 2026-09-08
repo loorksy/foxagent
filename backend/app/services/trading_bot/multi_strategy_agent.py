@@ -160,6 +160,89 @@ CHECKERS: dict[str, Callable[[list[OHLCV], StructureReport], bool]] = {
 }
 
 
+def generic_conditions(candles: list[OHLCV], report: StructureReport, conditions: dict[str, Any] | None) -> bool:
+    conds = conditions or {}
+    named = conds.get("checker")
+    if named in CHECKERS and not CHECKERS[named](candles, report):
+        return False
+    flags: list[bool] = []
+    if conds.get("asian_sweep"):
+        flags.append(bool(report.liquidity_sweep))
+    if conds.get("fvg_exists"):
+        flags.append(bool(report.fvgs))
+    if conds.get("bos_confirmed"):
+        flags.append(bool(report.last_bos))
+    if conds.get("breakout"):
+        flags.append(check_breakout(candles, report))
+    if conds.get("trend"):
+        flags.append(check_trend_follow(candles, report))
+    if conds.get("reversal") or conds.get("rejection"):
+        flags.append(check_reversal(candles, report))
+    if conds.get("impulse") or conds.get("scalp"):
+        flags.append(check_scalp(candles, report))
+    if not flags and named not in CHECKERS:
+        return False
+    return all(flags) if flags else True
+
+
+def evaluate_rule(rule: Any, candles: list[OHLCV], report: StructureReport) -> bool:
+    sid = getattr(rule, "id", None)
+    if sid in CHECKERS:
+        if not CHECKERS[sid](candles, report):
+            return False
+        extra = getattr(rule, "entry_conditions", None) or {}
+        return generic_conditions(candles, report, extra) if extra else True
+    return generic_conditions(candles, report, getattr(rule, "entry_conditions", None))
+
+
+def infer_side(rule: Any, candles: list[OHLCV], report: StructureReport) -> str:
+    direction = getattr(rule, "direction", "both")
+    if direction in {"buy", "sell"}:
+        return direction
+    sid = getattr(rule, "id", "")
+    if sid == "gold_breakout":
+        return "buy" if candles[-1].close > report.asian_high else "sell"
+    if sid == "gold_liquidity_sniper":
+        return "buy" if "BUY" in (report.liquidity_sweep or "") else "sell"
+    if sid == "gold_reversal":
+        last = candles[-1]
+        wick_up = last.high - max(last.close, last.open)
+        wick_dn = min(last.close, last.open) - last.low
+        return "sell" if wick_up > wick_dn else "buy"
+    return _side_from_bias(report.bias)
+
+
+def build_rule_signal(rule: Any, candles: list[OHLCV], report: StructureReport, timeframe: str) -> dict[str, Any] | None:
+    if not candles or not evaluate_rule(rule, candles, report):
+        return None
+    sid = getattr(rule, "id", "custom")
+    if sid in CHECKERS:
+        return build_strategy_signal(sid, candles, report, timeframe)
+    side = infer_side(rule, candles, report)
+    entry = calculate_entry(candles, report, side)
+    stop = calculate_stop(candles, side)
+    tp1_r = float(getattr(rule, "tp1_r", 1.5) or 1.5)
+    tp2_r = float(getattr(rule, "tp2_r", 3.0) or 3.0)
+    risk = abs(entry - stop) or 0.1
+    if side == "buy":
+        tp1, tp2 = entry + tp1_r * risk, entry + tp2_r * risk
+    else:
+        tp1, tp2 = entry - tp1_r * risk, entry - tp2_r * risk
+    return signal_payload(
+        agent_type="multi_strategy",
+        strategy_id=sid,
+        timeframe=timeframe,
+        signal_type=side,
+        entry=round(entry, 3),
+        stop=round(stop, 3),
+        tp1=round(tp1, 3),
+        tp2=round(tp2, 3),
+        confidence=0.6,
+        risk_reward=round(tp2_r, 2),
+        extra={"confluence": list(report.confluence), "bias": report.bias, "source": getattr(rule, "source", "")},
+    )
+
+
 def build_strategy_signal(
     strategy_id: str,
     candles: list[OHLCV],
@@ -208,29 +291,36 @@ def build_strategy_signal(
 class MultiStrategyAgent:
     def __init__(self, candle_source=None, active: list[str] | None = None):
         self.candle_source = candle_source
-        self.active = list(active or STRATEGIES.keys())
+        self.active = list(active) if active is not None else None
 
     async def _candles(self, timeframe: str, count: int = 180) -> list[OHLCV]:
         if self.candle_source is not None:
             return await self.candle_source(GOLD, timeframe, count)
         return await load_gold_candles(timeframe, count)
 
+    async def _rules(self):
+        from app.services.trading_bot.strategy_library import get_library
+
+        rules = await get_library().get_active_strategies()
+        if self.active is None:
+            return rules
+        wanted = set(self.active)
+        return [r for r in rules if r.id in wanted]
+
     async def scan_xau_usd(self) -> list[dict[str, Any]]:
         signals: list[dict[str, Any]] = []
         seen: set[str] = set()
-        for strategy_id in self.active:
-            meta = STRATEGIES.get(strategy_id)
-            if not meta:
-                continue
-            for tf in meta["timeframes"]:
+        rules = await self._rules()
+        for rule in rules:
+            for tf in rule.timeframes:
                 candles = await self._candles(tf)
                 if len(candles) < 20:
                     continue
                 report = analyze_structure(candles)
-                sig = build_strategy_signal(strategy_id, candles, report, tf)
+                sig = build_rule_signal(rule, candles, report, tf)
                 if not sig:
                     continue
-                key = f"{strategy_id}:{tf}:{sig['signalType']}"
+                key = f"{rule.id}:{tf}:{sig['signalType']}"
                 if key in seen:
                     continue
                 seen.add(key)

@@ -458,6 +458,94 @@ async def backtest_report_get(report_id: str) -> dict:
     return item
 
 
+def _strategy_result(result: dict, not_found: bool = False) -> dict:
+    if result.get("ok"):
+        return result
+    code = 404 if not_found or "not found" in str(result.get("detail") or "").lower() else 400
+    raise HTTPException(code, str(result.get("detail") or "Rejected"))
+
+
+@router.get("/strategies/proposed")
+async def strategies_proposed() -> dict:
+    from app.services.trading_bot.strategy_library import get_library
+
+    rows = await get_library().get_all()
+    proposed = [r.model_dump(mode="json") | {"timeframe": r.timeframes} for r in rows if r.status == "draft"]
+    return {"strategies": proposed}
+
+
+@router.get("/strategies")
+async def strategies_list(status: str | None = None) -> dict:
+    from app.services.trading_bot.strategy_library import get_library
+
+    rows = await get_library().get_all()
+    if status and status != "all":
+        rows = [r for r in rows if r.status == status]
+    return {"strategies": [r.model_dump(mode="json") | {"timeframe": r.timeframes} for r in rows]}
+
+
+@router.post("/strategies")
+async def strategies_create(body: dict = Body(...)) -> dict:
+    from app.services.trading_bot.strategy_library import get_library
+
+    source = str(body.get("source") or "manual")
+    if source not in {"manual", "claude_proposed"}:
+        source = "manual"
+    created_by = str(body.get("created_by") or body.get("createdBy") or "operator")
+    return _strategy_result(await get_library().propose(body, source=source, created_by=created_by))
+
+
+@router.get("/strategies/{strategy_id}")
+async def strategies_get(strategy_id: str) -> dict:
+    from app.services.trading_bot.strategy_library import get_library
+
+    rule = await get_library().get(strategy_id)
+    if rule is None:
+        raise HTTPException(404, "Strategy not found")
+    return rule.model_dump(mode="json") | {"timeframe": rule.timeframes}
+
+
+@router.patch("/strategies/{strategy_id}")
+async def strategies_patch(strategy_id: str, body: dict = Body(...)) -> dict:
+    from app.services.trading_bot.strategy_library import get_library
+
+    return _strategy_result(await get_library().patch(strategy_id, body))
+
+
+@router.delete("/strategies/{strategy_id}")
+async def strategies_delete(strategy_id: str) -> dict:
+    from app.services.trading_bot.strategy_library import get_library
+
+    return _strategy_result(await get_library().delete(strategy_id))
+
+
+@router.post("/strategies/{strategy_id}/validate")
+async def strategies_validate(strategy_id: str, body: dict | None = Body(default=None)) -> dict:
+    from app.services.trading_bot.strategy_library import get_library
+
+    payload = body or {}
+    auto = bool(payload.get("autoActivate") or payload.get("auto_activate"))
+    result = await get_library().validate(strategy_id, days=int(payload.get("days") or 730), auto_activate=auto)
+    if result.get("paused"):
+        raise HTTPException(409, str(result.get("detail") or "FoxAgent is paused"))
+    return _strategy_result(result)
+
+
+@router.post("/strategies/{strategy_id}/approve")
+async def strategies_approve(strategy_id: str) -> dict:
+    from app.services.trading_bot.strategy_library import get_library
+
+    return _strategy_result(await get_library().approve(strategy_id))
+
+
+@router.post("/strategies/{strategy_id}/reject")
+async def strategies_reject(strategy_id: str, body: dict | None = Body(default=None)) -> dict:
+    from app.services.trading_bot.strategy_library import get_library
+
+    reason = str((body or {}).get("reason") or (body or {}).get("rejection_reason") or "")
+    return _strategy_result(await get_library().reject(strategy_id, reason))
+
+
 @router.get("/models")
 async def models() -> dict:
     return {

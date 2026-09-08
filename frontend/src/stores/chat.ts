@@ -9,6 +9,8 @@ import type {
   MemoryRecall,
   RunThought,
   RunTool,
+  StrategyRule,
+  StrategyValidation,
 } from "@/lib/types";
 import { MODELS } from "@/lib/constants";
 import { uid } from "@/lib/utils";
@@ -36,6 +38,8 @@ type ChatState = {
   pushUser: (text: string) => string;
   startRun: (runId: string) => void;
   appendAssistant: (text: string, recommendationId?: string) => void;
+  attachStrategyProposal: (proposal: StrategyRule) => void;
+  attachStrategyValidation: (validation: StrategyValidation) => void;
   appendToken: (text: string) => void;
   appendThought: (agent: string, text: string, channel?: string) => void;
   upsertToolCall: (tool: RunTool) => void;
@@ -64,9 +68,11 @@ function asMessages(raw: unknown): ChatMessage[] {
         text,
         createdAt: Number(row.createdAt || Date.now()),
         recommendationId: row.recommendationId,
+        strategyProposal: row.strategyProposal,
+        strategyValidation: row.strategyValidation,
       } satisfies ChatMessage;
     })
-    .filter((m) => m.text || m.recommendationId);
+    .filter((m) => m.text || m.recommendationId || m.strategyProposal);
 }
 
 export const useChat = create<ChatState>((set) => ({
@@ -123,6 +129,24 @@ export const useChat = create<ChatState>((set) => ({
       return {
         messages: [...msgs, { id: uid("ast"), role: "assistant", text, createdAt: Date.now(), recommendationId }],
       };
+    }),
+  attachStrategyProposal: (proposal) =>
+    set((s) => {
+      const msgs = [...s.messages];
+      const last = [...msgs].reverse().find((m) => m.role === "assistant");
+      if (!last) {
+        return {
+          messages: [...msgs, { id: uid("ast"), role: "assistant", text: "", createdAt: Date.now(), strategyProposal: proposal }],
+        };
+      }
+      return { messages: msgs.map((m) => (m.id === last.id ? { ...m, strategyProposal: proposal } : m)) };
+    }),
+  attachStrategyValidation: (validation) =>
+    set((s) => {
+      const msgs = [...s.messages];
+      const last = [...msgs].reverse().find((m) => m.role === "assistant");
+      if (!last) return s;
+      return { messages: msgs.map((m) => (m.id === last.id ? { ...m, strategyValidation: validation } : m)) };
     }),
   appendToken: (text) =>
     set((s) => {

@@ -61,3 +61,19 @@ class StrategyPerformanceRow(Base):
     average_loss: Mapped[float] = mapped_column(Float, default=0.0)
     profit_factor: Mapped[float] = mapped_column(Float, default=0.0)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class StrategyRecord(Base):
+    __tablename__ = "strategies"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(128))
+    description: Mapped[str] = mapped_column(Text, default="")
+    rules: Mapped[str] = mapped_column(Text, default="{}")
+    source: Mapped[str] = mapped_column(String(32), default="manual")
+    created_by: Mapped[str] = mapped_column(String(64), default="operator")
+    status: Mapped[str] = mapped_column(String(24), default="draft", index=True)
+    validation_report_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

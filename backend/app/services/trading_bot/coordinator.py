@@ -113,7 +113,17 @@ class TradingBotCoordinator:
                 if kept:
                     saved.append(kept)
         if "multi_strategy" in agents:
-            self.multi_strategy_agent.active = active or list(self.multi_strategy_agent.active)
+            from app.services.trading_bot.strategy_library import get_library
+            from app.services.trading_bot.strategy_schema import BUILTIN_IDS
+
+            lib_active = await get_library().get_active_strategies()
+            settings_ids = set(active or BUILTIN_IDS)
+            scan_ids = [
+                r.id
+                for r in lib_active
+                if (r.id in BUILTIN_IDS and r.id in settings_ids) or r.id not in BUILTIN_IDS
+            ]
+            self.multi_strategy_agent.active = scan_ids
             for signal in await self.multi_strategy_agent.scan_xau_usd():
                 kept = await self._accept(signal, runtime)
                 if kept:

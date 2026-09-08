@@ -81,6 +81,40 @@ export type Instrument = {
 
 export type ChatRole = "user" | "assistant" | "system";
 
+export type StrategyStatus = "draft" | "validated" | "active" | "rejected" | "archived";
+export type StrategySource = "builtin" | "claude_proposed" | "manual";
+
+export type StrategyRule = {
+  id: string;
+  name: string;
+  description: string;
+  timeframes: string[];
+  timeframe?: string[];
+  direction: "buy" | "sell" | "both";
+  entry_conditions: Record<string, unknown>;
+  stop_rule: string;
+  tp1_r: number;
+  tp2_r: number;
+  max_holding_bars: number;
+  source: StrategySource;
+  created_by: string;
+  status: StrategyStatus;
+  validation_report_id?: string | null;
+  rejection_reason?: string | null;
+  created_at?: string;
+  validated_at?: string | null;
+};
+
+export type StrategyValidation = {
+  ok: boolean;
+  passed?: boolean;
+  paused?: boolean;
+  reasons?: string[];
+  strategy?: StrategyRule;
+  report?: BacktestReport;
+  detail?: string;
+};
+
 export type ChatMessage = {
   id: string;
   role: ChatRole;
@@ -88,6 +122,8 @@ export type ChatMessage = {
   createdAt: number;
   recommendationId?: string;
   streaming?: boolean;
+  strategyProposal?: StrategyRule;
+  strategyValidation?: StrategyValidation;
 };
 
 export type StructureFvg = {

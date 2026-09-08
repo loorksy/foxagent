@@ -72,7 +72,7 @@ docker compose up -d
 
 ## Agent contract
 
-MCP tools registered for Claude (13):
+MCP tools registered for Claude:
 
 1. `get_candles(instrument, granularity, count)`
 2. `get_live_price(instrument)`
@@ -87,6 +87,8 @@ MCP tools registered for Claude (13):
 11. `query_macro_memory`
 12. `validate_risk_rules` — preview only; `persist_recommendation` still enforces the gate
 13. `record_post_trade_reflection`
+14. `draw_on_chart`
+15. `propose_strategy` / `validate_strategy` / `list_strategies` — Strategy Lab (XAU_USD drafts + warehouse backtest)
 
 Recommendation JSON matches the `klineOverlays` overlay API consumed by the chart.
 
