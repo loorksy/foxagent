@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, String, Text, select
+from sqlalchemy import DateTime, String, Text, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -55,11 +55,26 @@ async def init_db() -> None:
 
     settings = get_settings()
     try:
-        engine = create_async_engine(settings.database_url, echo=False, future=True)
+        sqlite = "sqlite" in settings.database_url
+        engine = create_async_engine(
+            settings.database_url,
+            echo=False,
+            future=True,
+            connect_args={"timeout": 30} if sqlite else {},
+        )
         SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            if sqlite:
+                await conn.execute(text("PRAGMA journal_mode=WAL"))
+                await conn.execute(text("PRAGMA busy_timeout=30000"))
         logger.info("Database ready (%s)", settings.database_url.split("://")[0])
+        try:
+            from app.services.trading_bot.strategy_library import get_library
+
+            await get_library().get_all(hydrate=True)
+        except Exception as exc:
+            logger.warning("Strategy library hydrate skipped: %s", exc)
     except Exception as exc:
         logger.warning("Database unavailable, using memory store: %s", exc)
         engine = None

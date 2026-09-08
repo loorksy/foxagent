@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 _memory: dict[str, dict[str, Any]] = {}
 _LIBRARY: "StrategyLibrary | None" = None
+_hydrated = False
 
 _KEY_ALIASES = {
     "entryConditions": "entry_conditions",
@@ -81,12 +82,25 @@ class StrategyLibrary:
             out[rule.id] = rule
         return out
 
-    async def _load_stored(self) -> list[StrategyRule]:
-        rows: list[dict[str, Any]] = list(_memory.values())
-        if SessionLocal is not None:
+    def _from_memory(self) -> list[StrategyRule]:
+        out: list[StrategyRule] = []
+        for item in _memory.values():
+            rule = _from_row(item)
+            if rule and rule.id not in self._builtins:
+                out.append(rule)
+        return out
+
+    async def _hydrate(self) -> None:
+        """Load persisted rows once. The live bot reads memory afterwards."""
+        global _hydrated
+        if _hydrated:
+            return
+        if SessionLocal is None:
+            _hydrated = True
+            return
+        try:
             async with SessionLocal() as session:
                 result = await session.execute(select(StrategyRecord))
-                rows = []
                 for row in result.scalars():
                     try:
                         payload = json.loads(row.rules or "{}")
@@ -106,40 +120,48 @@ class StrategyLibrary:
                             "validated_at": row.validated_at,
                         }
                     )
-                    rows.append(payload)
-        out: list[StrategyRule] = []
-        for item in rows:
-            rule = _from_row(item)
-            if rule and rule.id not in self._builtins:
-                out.append(rule)
-        return out
+                    sid = str(payload.get("id") or "")
+                    if sid and sid not in self._builtins:
+                        _memory[sid] = payload
+            _hydrated = True
+        except Exception as exc:
+            logger.warning("Strategy library hydrate skipped: %s", exc)
+            _hydrated = True
+
+    async def _load_stored(self, *, hydrate: bool = True) -> list[StrategyRule]:
+        if hydrate:
+            await self._hydrate()
+        return self._from_memory()
 
     async def _persist(self, rule: StrategyRule) -> StrategyRule:
         payload = rule.model_dump(mode="json")
         _memory[rule.id] = payload
         if SessionLocal is None:
             return rule
-        async with SessionLocal() as session:
-            await session.merge(
-                StrategyRecord(
-                    id=rule.id,
-                    name=rule.name,
-                    description=rule.description,
-                    rules=json.dumps(payload, default=str),
-                    source=rule.source,
-                    created_by=rule.created_by,
-                    status=rule.status,
-                    validation_report_id=rule.validation_report_id,
-                    rejection_reason=rule.rejection_reason,
-                    created_at=rule.created_at,
-                    validated_at=rule.validated_at,
+        try:
+            async with SessionLocal() as session:
+                await session.merge(
+                    StrategyRecord(
+                        id=rule.id,
+                        name=rule.name,
+                        description=rule.description,
+                        rules=json.dumps(payload, default=str),
+                        source=rule.source,
+                        created_by=rule.created_by,
+                        status=rule.status,
+                        validation_report_id=rule.validation_report_id,
+                        rejection_reason=rule.rejection_reason,
+                        created_at=rule.created_at,
+                        validated_at=rule.validated_at,
+                    )
                 )
-            )
-            await session.commit()
+                await session.commit()
+        except Exception as exc:
+            logger.warning("Strategy persist deferred to memory: %s", exc)
         return rule
 
-    async def get_all(self) -> list[StrategyRule]:
-        merged = self._merge(await self._load_stored())
+    async def get_all(self, *, hydrate: bool = True) -> list[StrategyRule]:
+        merged = self._merge(await self._load_stored(hydrate=hydrate))
         return sorted(merged.values(), key=lambda r: (0 if r.source == "builtin" else 1, r.name))
 
     async def get(self, strategy_id: str) -> StrategyRule | None:
@@ -149,7 +171,7 @@ class StrategyLibrary:
         return merged.get(strategy_id)
 
     async def get_active_strategies(self) -> list[StrategyRule]:
-        return [r for r in await self.get_all() if r.status == "active"]
+        return [r for r in await self.get_all(hydrate=False) if r.status == "active"]
 
     async def list_runnable(self, timeframe: str | None = None) -> list[StrategyRule]:
         rows = [r for r in await self.get_all() if r.status == "active"]
@@ -318,8 +340,9 @@ def get_library() -> StrategyLibrary:
 
 
 def reset_library() -> StrategyLibrary:
-    global _LIBRARY
+    global _LIBRARY, _hydrated
     _memory.clear()
+    _hydrated = False
     _LIBRARY = StrategyLibrary()
     return _LIBRARY
 

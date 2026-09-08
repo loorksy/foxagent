@@ -7,7 +7,7 @@ import pytest
 from app.services.mcp_tools import dispatch_tool, mcp_tool_specs
 from app.services.sdk_runtime import SDK_TOOLS
 from app.services.trading_bot.multi_strategy_agent import MultiStrategyAgent
-from app.services.trading_bot.strategy_library import get_library, reset_library, reset_library_store
+from app.services.trading_bot.strategy_library import get_library, reset_library
 from app.services.trading_bot.strategy_schema import BUILTIN_IDS, VALIDATION_THRESHOLDS, builtin_rules, evaluate_thresholds
 
 
@@ -45,10 +45,13 @@ def _draft_payload(name: str = "Asian FVG fade") -> dict:
 
 
 @pytest.fixture(autouse=True)
-async def _clean_lab():
-    await reset_library_store()
+async def _clean_lab(monkeypatch):
+    import app.services.trading_bot.strategy_library as lab
+
+    reset_library()
+    monkeypatch.setattr(lab, "SessionLocal", None)
     yield
-    await reset_library_store()
+    reset_library()
 
 
 def test_builtins_load():
@@ -196,66 +199,69 @@ def test_thresholds_helper():
     assert not failed and why
 
 
-def test_rest_strategy_api(client, auth_header):
-    listed = client.get("/api/strategies", headers=auth_header)
-    assert listed.status_code == 200
-    ids = {row["id"] for row in listed.json()["strategies"]}
+@pytest.mark.asyncio
+async def test_rest_strategy_api():
+    from fastapi import HTTPException
+    from app.api import routes
+
+    listed = await routes.strategies_list()
+    ids = {row["id"] for row in listed["strategies"]}
     assert set(BUILTIN_IDS) <= ids
 
-    created = client.post("/api/strategies", headers=auth_header, json=_draft_payload("API gold draft"))
-    assert created.status_code == 200
-    sid = created.json()["strategy"]["id"]
+    created = await routes.strategies_create(_draft_payload("API gold draft"))
+    sid = created["strategy"]["id"]
 
-    proposed = client.get("/api/strategies/proposed", headers=auth_header)
-    assert proposed.status_code == 200
-    assert any(row["id"] == sid for row in proposed.json()["strategies"])
+    proposed = await routes.strategies_proposed()
+    assert any(row["id"] == sid for row in proposed["strategies"])
 
-    patched = client.patch(f"/api/strategies/{sid}", headers=auth_header, json={"description": "updated"})
-    assert patched.status_code == 200
-    assert patched.json()["strategy"]["description"] == "updated"
+    patched = await routes.strategies_patch(sid, {"description": "updated"})
+    assert patched["strategy"]["description"] == "updated"
 
-    detail = client.get(f"/api/strategies/{sid}", headers=auth_header)
-    assert detail.status_code == 200
-    assert detail.json()["id"] == sid
+    detail = await routes.strategies_get(sid)
+    assert detail["id"] == sid
 
-    rejected = client.post(f"/api/strategies/{sid}/reject", headers=auth_header, json={"reason": "not now"})
-    assert rejected.status_code == 200
-    assert rejected.json()["strategy"]["status"] == "rejected"
+    rejected = await routes.strategies_reject(sid, {"reason": "not now"})
+    assert rejected["strategy"]["status"] == "rejected"
 
-    gone = client.delete(f"/api/strategies/{sid}", headers=auth_header)
-    assert gone.status_code == 400
+    with pytest.raises(HTTPException) as gone:
+        await routes.strategies_delete(sid)
+    assert gone.value.status_code == 400
 
-    builtin = client.delete("/api/strategies/gold_scalp", headers=auth_header)
-    assert builtin.status_code == 400
+    with pytest.raises(HTTPException) as builtin:
+        await routes.strategies_delete("gold_scalp")
+    assert builtin.value.status_code == 400
 
 
-def test_rest_validate_approve_with_fake_engine(client, auth_header, monkeypatch):
+@pytest.mark.asyncio
+async def test_rest_validate_approve_with_fake_engine(monkeypatch):
+    from app.api import routes
+
     class FakeEngine:
         async def run(self, **_kwargs):
             return _pass_report()
 
     monkeypatch.setattr("app.services.backtest.engine.BacktestEngine", FakeEngine)
-    created = client.post("/api/strategies", headers=auth_header, json=_draft_payload("API validated play"))
-    sid = created.json()["strategy"]["id"]
-    validated = client.post(f"/api/strategies/{sid}/validate", headers=auth_header, json={"days": 730})
-    assert validated.status_code == 200
-    body = validated.json()
+    created = await routes.strategies_create(_draft_payload("API validated play"))
+    sid = created["strategy"]["id"]
+    body = await routes.strategies_validate(sid, {"days": 730})
     assert body["passed"] is True
     assert body["strategy"]["status"] == "validated"
-    approved = client.post(f"/api/strategies/{sid}/approve", headers=auth_header)
-    assert approved.status_code == 200
-    assert approved.json()["strategy"]["status"] == "active"
+    approved = await routes.strategies_approve(sid)
+    assert approved["strategy"]["status"] == "active"
 
 
 @pytest.mark.asyncio
-async def test_rest_validate_paused(client, auth_header):
+async def test_rest_validate_paused():
+    from fastapi import HTTPException
+    from app.api import routes
     from app.services.run_control import set_paused
 
-    created = client.post("/api/strategies", headers=auth_header, json=_draft_payload("Paused API play"))
-    sid = created.json()["strategy"]["id"]
+    created = await routes.strategies_create(_draft_payload("Paused API play"))
+    sid = created["strategy"]["id"]
     await set_paused(True)
     try:
-        resp = client.post(f"/api/strategies/{sid}/validate", headers=auth_header, json={})
-        assert resp.status_code == 409
+        with pytest.raises(HTTPException) as exc:
+            await routes.strategies_validate(sid, {})
+        assert exc.value.status_code == 409
     finally:
         await set_paused(False)
