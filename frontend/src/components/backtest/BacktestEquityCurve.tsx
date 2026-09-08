@@ -5,7 +5,8 @@ import { useBacktest } from "@/stores/backtest";
 import { useT } from "@/i18n";
 
 export function BacktestEquityCurve() {
-  const trades = useBacktest((s) => s.report?.trades || []);
+  const report = useBacktest((s) => s.report);
+  const trades = report?.trades ?? [];
   const t = useT();
   const points = useMemo(() => {
     let eq = 0;
