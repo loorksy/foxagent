@@ -127,6 +127,24 @@ def reset_memory() -> None:
     _memory.clear()
 
 
+async def delete_by_source(timeframe: str, source: str) -> int:
+    tf = warehouse_tf(timeframe)
+    if tf is None:
+        return 0
+    session_local = _session_factory()
+    if session_local is None:
+        keys = [k for k, v in _memory.items() if k[0] == tf and v.get("source") == source]
+        for key in keys:
+            _memory.pop(key, None)
+        return len(keys)
+    async with session_local() as session:
+        result = await session.execute(
+            delete(GoldCandleRow).where(GoldCandleRow.timeframe == tf, GoldCandleRow.source == source)
+        )
+        await session.commit()
+        return int(result.rowcount or 0)
+
+
 async def upsert_candles(
     timeframe: str,
     candles: Iterable[OHLCV],
