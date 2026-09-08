@@ -74,6 +74,33 @@ async def tool_query_macro_memory(instrument: str, query: str = "") -> dict[str,
     return {"kind": "macro", "instrument": instrument, "context": text}
 
 
+async def tool_get_economic_calendar(
+    instrument: str = "XAU_USD",
+    hours_ahead: int = 24,
+    min_impact: str = "medium",
+) -> dict[str, Any]:
+    """جلسة UTC + أحداث USD الحقيقية المؤثرة على الذهب. لا يختلق طبعات."""
+    session = await get_economic_calendar(instrument)
+    from app.services.economic_calendar import upcoming_events
+
+    live = await upcoming_events(hours_ahead=hours_ahead, min_impact=min_impact)
+    events = live.get("events") or []
+    payload = {
+        **session,
+        "events": events,
+        "cached": bool(live.get("cached")),
+        "hoursAhead": hours_ahead,
+        "minImpact": min_impact,
+        "instrument": instrument or "XAU_USD",
+    }
+    if events:
+        payload["source"] = live.get("source") or "forex_factory"
+        payload["note"] = "Real USD events that typically move XAU_USD. Empty actuals mean the print is still pending."
+    if live.get("warning"):
+        payload["warning"] = live["warning"]
+    return payload
+
+
 async def tool_record_post_trade_reflection(
     recommendation_id: str,
     outcome: str,
@@ -208,10 +235,14 @@ def mcp_tool_specs() -> list[dict[str, Any]]:
         },
         {
             "name": "get_economic_calendar",
-            "description": "UTC session clock and calendar windows. Does not invent economic prints.",
+            "description": "UTC session clock plus real USD events that typically move gold. Does not invent prints if the feed is empty.",
             "input_schema": {
                 "type": "object",
-                "properties": {"instrument": {"type": "string"}},
+                "properties": {
+                    "instrument": {"type": "string"},
+                    "hours_ahead": {"type": "integer", "minimum": 1, "maximum": 168},
+                    "min_impact": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
+                },
             },
         },
         {
@@ -323,7 +354,11 @@ async def dispatch_tool(name: str, args: dict[str, Any], emit: Emit | None = Non
     if name == "query_macro_memory":
         return await tool_query_macro_memory(args["instrument"], args.get("query") or "")
     if name == "get_economic_calendar":
-        return await get_economic_calendar(args.get("instrument") or "XAU_USD")
+        return await tool_get_economic_calendar(
+            args.get("instrument") or "XAU_USD",
+            int(args.get("hours_ahead") or 24),
+            str(args.get("min_impact") or "medium"),
+        )
     if name == "get_market_sentiment":
         return await get_market_sentiment(args.get("instrument") or "XAU_USD")
     if name == "fetch_financial_news":
@@ -415,10 +450,18 @@ def try_build_sdk_server():
         data = await tool_query_technical_memory(args["instrument"], args.get("query") or "")
         return {"content": [{"type": "text", "text": json.dumps(data)}]}
 
-    @tool("get_economic_calendar", "UTC session clock.", {"instrument": str})
+    @tool(
+        "get_economic_calendar",
+        "UTC session clock plus real USD gold events.",
+        {"instrument": str, "hours_ahead": int, "min_impact": str},
+    )
     async def economic_calendar(args: dict[str, Any]) -> dict[str, Any]:
-        data = await get_economic_calendar(args.get("instrument") or "XAU_USD")
-        return {"content": [{"type": "text", "text": json.dumps(data)}]}
+        data = await tool_get_economic_calendar(
+            args.get("instrument") or "XAU_USD",
+            int(args.get("hours_ahead") or 24),
+            str(args.get("min_impact") or "medium"),
+        )
+        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
 
     @tool("get_market_sentiment", "Live bias and session.", {"instrument": str})
     async def market_sentiment(args: dict[str, Any]) -> dict[str, Any]:

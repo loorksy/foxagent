@@ -212,6 +212,15 @@ export type SettingsPublic = {
   telegramChatId: string;
   enableTelegramNotifications: boolean;
   telegramConfigured: boolean;
+  botEnabled?: boolean;
+  botScanInterval?: number;
+  botAgents?: string[];
+  botActiveStrategies?: string[];
+  botMaxRiskPercent?: number;
+  botMinRr?: number;
+  botAllowedSessions?: string[];
+  economicCalendarProvider?: string;
+  economicCalendarCacheTtl?: number;
 };
 
 export type SettingsPayload = {
@@ -226,4 +235,67 @@ export type SettingsPayload = {
   telegramBotToken: string;
   telegramChatId: string;
   enableTelegramNotifications: boolean;
+  botEnabled?: boolean;
+  botScanInterval?: number;
+  botAgents?: string[];
+  botActiveStrategies?: string[];
+  botMaxRiskPercent?: number;
+  botMinRr?: number;
+  botAllowedSessions?: string[];
+  economicCalendarProvider?: string;
+  economicCalendarCacheTtl?: number;
+};
+
+export type EconomicEvent = {
+  id: string;
+  title: string;
+  country: string;
+  timestamp: string;
+  impact: "low" | "medium" | "high" | "critical";
+  forecast?: number | null;
+  previous?: number | null;
+  actual?: number | null;
+  unit?: string;
+  source?: string;
+  gold_impact?: "positive" | "negative" | "neutral";
+};
+
+export type BotSignal = {
+  id: string;
+  agentType: string;
+  strategyId: string;
+  instrument: string;
+  timeframe: string;
+  signalType: string;
+  entryPrice: number;
+  stopLoss: number;
+  takeProfit1: number;
+  takeProfit2: number;
+  confidence: number;
+  riskReward: number;
+  status: string;
+  pnl?: number;
+  recommendationId?: string;
+  createdAt?: string | null;
+};
+
+export type BotStatus = {
+  running: boolean;
+  enabled?: boolean;
+  paused?: boolean;
+  uptimeSeconds?: number;
+  signalsToday?: number;
+  lastError?: string;
+};
+
+export type StrategyPerf = {
+  strategyId: string;
+  agentType: string;
+  totalSignals: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  averageWin?: number;
+  averageLoss?: number;
+  profitFactor?: number;
 };

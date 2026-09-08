@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-export type UiSection = "chat" | "recommendations" | "settings" | "memory";
+export type UiSection = "chat" | "recommendations" | "settings" | "memory" | "calendar" | "bot";
 
 type UiState = {
   section: UiSection;

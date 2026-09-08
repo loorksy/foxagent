@@ -49,6 +49,8 @@ async def init_db() -> None:
     from app.services import gold_warehouse as _gold_warehouse  # noqa: F401
     from app.services import memory_log as _memory_log  # noqa: F401
     from app.services import session_store as _session_store  # noqa: F401
+    from app.services import economic_calendar as _economic_calendar  # noqa: F401
+    from app.services.trading_bot import models as _bot_models  # noqa: F401
 
     settings = get_settings()
     try:

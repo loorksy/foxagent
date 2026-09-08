@@ -8,6 +8,8 @@ import pytest
 os.environ.setdefault("APP_PASSWORD", "test-operator-password")
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret-do-not-use-in-prod")
 os.environ.setdefault("GOLD_WAREHOUSE_SYNC", "0")
+os.environ.setdefault("FOXAGENT_CALENDAR_FETCH", "0")
+os.environ.setdefault("FOXAGENT_BOT_AUTOSTART", "0")
 
 
 @pytest.fixture

@@ -269,6 +269,23 @@ export function SettingsPanel() {
         )}
 
         <section className="space-y-3 rounded-xl border border-border bg-card p-4">
+          <h2 className="text-sm font-semibold">{t("settings.bot")}</h2>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={Boolean(form.botEnabled)}
+              onChange={(e) => patchForm({ botEnabled: e.target.checked })}
+            />
+            {t("settings.botEnabled")}
+          </label>
+          <Field
+            label={t("settings.botInterval")}
+            value={String(form.botScanInterval ?? 60)}
+            onChange={(v) => patchForm({ botScanInterval: Number(v) || 60 })}
+          />
+        </section>
+
+        <section className="space-y-3 rounded-xl border border-border bg-card p-4">
           <h2 className="text-sm font-semibold">{paused ? t("settings.paused") : t("settings.active")}</h2>
           <button
             type="button"

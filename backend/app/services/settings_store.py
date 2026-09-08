@@ -103,6 +103,22 @@ async def load_runtime_settings() -> SettingsPayload:
         enableTelegramNotifications=(
             stored.enableTelegramNotifications if raw else env.enable_telegram_notifications
         ),
+        botEnabled=stored.botEnabled,
+        botScanInterval=stored.botScanInterval or 60,
+        botAgents=stored.botAgents or ["multi_strategy", "pattern_notes", "news_candle"],
+        botActiveStrategies=stored.botActiveStrategies
+        or [
+            "gold_liquidity_sniper",
+            "gold_breakout",
+            "gold_trend_follow",
+            "gold_reversal",
+            "gold_scalp",
+        ],
+        botMaxRiskPercent=stored.botMaxRiskPercent or 1.0,
+        botMinRr=stored.botMinRr or 2.0,
+        botAllowedSessions=stored.botAllowedSessions or ["london", "ny", "asian"],
+        economicCalendarProvider=stored.economicCalendarProvider or "forex_factory",
+        economicCalendarCacheTtl=stored.economicCalendarCacheTtl or 5,
     )
 
 
@@ -156,6 +172,15 @@ def to_public(payload: SettingsPayload) -> SettingsPublic:
         telegramChatId=payload.telegramChatId,
         enableTelegramNotifications=payload.enableTelegramNotifications,
         telegramConfigured=bool(payload.telegramBotToken and payload.telegramChatId),
+        botEnabled=payload.botEnabled,
+        botScanInterval=payload.botScanInterval,
+        botAgents=payload.botAgents,
+        botActiveStrategies=payload.botActiveStrategies,
+        botMaxRiskPercent=payload.botMaxRiskPercent,
+        botMinRr=payload.botMinRr,
+        botAllowedSessions=payload.botAllowedSessions,
+        economicCalendarProvider=payload.economicCalendarProvider,
+        economicCalendarCacheTtl=payload.economicCalendarCacheTtl,
     )
 
 

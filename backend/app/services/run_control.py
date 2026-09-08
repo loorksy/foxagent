@@ -55,6 +55,12 @@ async def set_paused(paused: bool) -> bool:
     global _paused_memory
     _paused_memory = paused
     await kv_set(PAUSE_KEY, "1" if paused else "0")
+    try:
+        from app.services.trading_bot import get_coordinator
+
+        await get_coordinator().on_pause_changed(paused)
+    except Exception:
+        pass
     return paused
 
 

@@ -28,6 +28,19 @@ const emptyForm: SettingsPayload = {
   telegramBotToken: "",
   telegramChatId: "",
   enableTelegramNotifications: false,
+  botEnabled: false,
+  botScanInterval: 60,
+  botAgents: ["multi_strategy", "pattern_notes", "news_candle"],
+  botActiveStrategies: [
+    "gold_liquidity_sniper",
+    "gold_breakout",
+    "gold_trend_follow",
+    "gold_reversal",
+    "gold_scalp",
+  ],
+  botMaxRiskPercent: 1,
+  botMinRr: 2,
+  botAllowedSessions: ["london", "ny", "asian"],
 };
 
 export const useSettings = create<SettingsState>((set, get) => ({
@@ -49,6 +62,13 @@ export const useSettings = create<SettingsState>((set, get) => ({
         allowedSessions: pub.allowedSessions,
         telegramChatId: pub.telegramChatId || "",
         enableTelegramNotifications: Boolean(pub.enableTelegramNotifications),
+        botEnabled: Boolean(pub.botEnabled),
+        botScanInterval: pub.botScanInterval || 60,
+        botAgents: pub.botAgents || s.form.botAgents,
+        botActiveStrategies: pub.botActiveStrategies || s.form.botActiveStrategies,
+        botMaxRiskPercent: pub.botMaxRiskPercent ?? 1,
+        botMinRr: pub.botMinRr ?? 2,
+        botAllowedSessions: pub.botAllowedSessions || s.form.botAllowedSessions,
       },
     }));
   },

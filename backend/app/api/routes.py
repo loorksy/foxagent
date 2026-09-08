@@ -302,6 +302,128 @@ async def system_resume() -> dict:
     return {"paused": False}
 
 
+@router.get("/economic-calendar")
+async def economic_calendar(hours_ahead: int = 24, min_impact: str = "medium") -> dict:
+    from app.services.mcp_tools import tool_get_economic_calendar
+
+    payload = await tool_get_economic_calendar("XAU_USD", hours_ahead, min_impact)
+    return {
+        "events": payload.get("events") or [],
+        "source": payload.get("source") or "session-clock",
+        "cached": bool(payload.get("cached")),
+        "warning": payload.get("warning") or "",
+        "session": payload.get("session"),
+        "windows": payload.get("windows") or [],
+        "note": payload.get("note") or "",
+    }
+
+
+@router.get("/economic-calendar/upcoming")
+async def economic_calendar_upcoming() -> dict:
+    return await economic_calendar(hours_ahead=48, min_impact="medium")
+
+
+@router.get("/bot/status")
+async def bot_status() -> dict:
+    from app.services.trading_bot import get_coordinator
+    from app.services.trading_bot.coordinator import today_signal_count
+    from app.services.settings_store import load_runtime_settings
+
+    runtime = await load_runtime_settings()
+    snap = get_coordinator().snapshot()
+    snap["enabled"] = bool(runtime.botEnabled)
+    snap["paused"] = await is_paused()
+    snap["signalsToday"] = await today_signal_count()
+    return snap
+
+
+@router.post("/bot/start")
+async def bot_start() -> dict:
+    from app.services.trading_bot import get_coordinator
+    from app.services.settings_store import load_runtime_settings, save_runtime_settings
+
+    runtime = await load_runtime_settings()
+    runtime.botEnabled = True
+    await save_runtime_settings(runtime)
+    if await is_paused():
+        return {**get_coordinator().snapshot(), "enabled": True, "paused": True}
+    return await get_coordinator().start()
+
+
+@router.post("/bot/stop")
+async def bot_stop() -> dict:
+    from app.services.trading_bot import get_coordinator
+    from app.services.settings_store import load_runtime_settings, save_runtime_settings
+
+    runtime = await load_runtime_settings()
+    runtime.botEnabled = False
+    await save_runtime_settings(runtime)
+    return await get_coordinator().stop()
+
+
+@router.get("/bot/signals")
+async def bot_signals() -> dict:
+    from app.services.trading_bot.store import list_signals
+
+    return {"signals": await list_signals(50)}
+
+
+@router.get("/bot/signals/{signal_id}")
+async def bot_signal_get(signal_id: str) -> dict:
+    from app.services.trading_bot.store import get_signal
+
+    item = await get_signal(signal_id)
+    if not item:
+        raise HTTPException(404, "Not found")
+    return item
+
+
+@router.patch("/bot/signals/{signal_id}")
+async def bot_signal_patch(signal_id: str, patch: dict = Body(...)) -> dict:
+    from app.services.trading_bot.store import update_signal
+    from app.services.telegram_service import schedule_bot_result
+
+    updated = await update_signal(signal_id, patch)
+    if not updated:
+        raise HTTPException(404, "Not found")
+    if updated.get("status") in {"won", "lost"}:
+        try:
+            schedule_bot_result(updated, float(updated.get("pnl") or 0))
+        except Exception:
+            pass
+    return updated
+
+
+@router.post("/bot/signals/{signal_id}/to-recommendation")
+async def bot_signal_promote(signal_id: str) -> dict:
+    from app.services.trading_bot.promote import promote_signal
+    from app.services.trading_bot.store import get_signal
+
+    signal = await get_signal(signal_id)
+    if not signal:
+        raise HTTPException(404, "Not found")
+    if float(signal.get("confidence") or 0) < 0.8:
+        raise HTTPException(400, "Confidence must be above 0.8 to convert")
+    result = await promote_signal(signal_id)
+    if not result.get("ok"):
+        raise HTTPException(400, str(result.get("detail") or result.get("reasons") or "Rejected"))
+    return result
+
+
+@router.get("/bot/performance")
+async def bot_performance() -> dict:
+    from app.services.trading_bot.store import list_performance
+
+    return {"performance": await list_performance()}
+
+
+@router.get("/bot/performance/{agent}")
+async def bot_performance_agent(agent: str) -> dict:
+    from app.services.trading_bot.store import list_performance
+
+    return {"agent": agent, "performance": await list_performance(agent)}
+
+
 @router.get("/models")
 async def models() -> dict:
     return {
