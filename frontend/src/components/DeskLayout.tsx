@@ -53,7 +53,9 @@ export function DeskLayout({ children }: { children?: React.ReactNode }) {
             ? "calendar"
             : pathname.startsWith("/bot")
               ? "bot"
-              : "chat";
+              : pathname.startsWith("/backtest")
+                ? "backtest"
+                : "chat";
 
   useEffect(() => {
     useUi.setState({ section });
@@ -179,6 +181,7 @@ export function DeskLayout({ children }: { children?: React.ReactNode }) {
           {section === "memory" && (children || <MemoryPage />)}
           {section === "calendar" && children}
           {section === "bot" && children}
+          {section === "backtest" && children}
           {section === "settings" && (children || <SettingsPanel />)}
         </main>
       </div>

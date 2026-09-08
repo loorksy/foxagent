@@ -6,6 +6,8 @@ Autonomous ICT / Smart Money trading workstation: **Claude Agent SDK** + **OANDA
 
 **دليل بوت الذهب (عربي / English):** [docs/TRADING_BOT_GUIDE.md](docs/TRADING_BOT_GUIDE.md)
 
+**دليل باك تست الذهب:** [docs/BACKTEST_GUIDE.md](docs/BACKTEST_GUIDE.md)
+
 The agent talks to Anthropic only. There is no local / algorithmic stand-in that fabricates a Claude setup. `ANTHROPIC_API_KEY` must be a real key that can create messages. Without it (or if Anthropic rejects the account), the chat returns the provider error.
 
 Single-operator login is required. Set `APP_PASSWORD` (or a bcrypt `ADMIN_PASSWORD_HASH`) and `JWT_SECRET`. The UI sends an httpOnly cookie after `POST /api/auth/login`. Every `/api/*` route and `/ws/market` require that token.

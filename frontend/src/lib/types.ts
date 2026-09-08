@@ -288,6 +288,54 @@ export type BotStatus = {
   lastError?: string;
 };
 
+export type BacktestTrade = {
+  strategyId: string;
+  timeframe: string;
+  entryTime: string;
+  exitTime: string;
+  direction: "buy" | "sell";
+  entryPrice: number;
+  stopLoss: number;
+  takeProfit1: number;
+  takeProfit2: number;
+  exitPrice: number;
+  pnlR: number;
+  pnlPercent: number;
+  exitReason: string;
+};
+
+export type BacktestBucket = {
+  trades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  totalR: number;
+  averageR?: number;
+};
+
+export type BacktestReport = {
+  id?: string;
+  symbol: string;
+  timeframe: string;
+  strategyId?: string | null;
+  days: number;
+  candlesTested: number;
+  totalTrades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  averageR: number;
+  totalR: number;
+  profitFactor: number;
+  maxDrawdownR: number;
+  trades: BacktestTrade[];
+  byStrategy: Record<string, BacktestBucket>;
+  bySession: Record<string, BacktestBucket>;
+  byMonth: Record<string, BacktestBucket>;
+  textReport?: string;
+  createdAt?: string | null;
+};
+
 export type StrategyPerf = {
   strategyId: string;
   agentType: string;

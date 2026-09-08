@@ -645,12 +645,22 @@ erDiagram
     int occurrences
     float win_rate
   }
-  strategy_performance {
+    strategy_performance {
     string id PK
     string strategy_id
     int wins
     int losses
     float win_rate
+  }
+  backtest_reports {
+    string id PK
+    string timeframe
+    string strategy_id
+    int days
+    int total_trades
+    float win_rate
+    float total_r
+    text payload
   }
 ```
 
@@ -822,6 +832,8 @@ erDiagram
 | GET/PATCH | `/api/bot/signals` `/signals/{id}` | آخر 50 إشارة + تحديث الحالة |
 | POST | `/api/bot/signals/{id}/to-recommendation` | تحويل إن الثقة > 0.8 |
 | GET | `/api/bot/performance` `/performance/{agent}` | win rate لكل استراتيجية |
+| POST | `/api/backtest/run` | باك تست حتمي على المستودع |
+| GET | `/api/backtest/reports` `/reports/{id}` | آخر 20 تقريراً |
 
 `GET /api/settings` يعيد `SettingsPublic` (المفاتيح مقنّعة: هل وُضعت أم لا) دون تسريب السر.
 
@@ -860,7 +872,8 @@ erDiagram
 
 - `/calendar`: جدول أحداث USD، تلوين الأثر (أحمر/برتقالي/أصفر)، عدّاد للحدث التالي، سهم أثر الذهب.
 - `/bot`: تشغيل/إيقاف، بطاقات الوكلاء الثلاثة، اختيار الاستراتيجيات، الإشارات الحيّة، زر «تحويل لتوصية»، والتقويم المضمّن.
-- الشريط الجانبي: «التقويم» و«البوت».
+- `/backtest`: تشغيل باك تست حتمي، ملخص R، منحنى تراكمي، مقارنة الاستراتيجيات.
+- الشريط الجانبي: «التقويم» و«البوت» و«الباك تست».
 
 ### 7.5 الإعدادات (`/settings`)
 
@@ -1009,7 +1022,18 @@ cd frontend && npx vitest run
 
 ### 10.3 Backtesting
 
-**لا محرّك باك تست في المستودع.** مستودع السنتين يوفّر المادة الخام (إعادة تشغيل الماسح على تاريخ الذهب) لكنه لا يحاكي تنفيذ أوامر ولا ينتج منحنى حقوق. أي باك تست اليوم سكربت خارجي على `gold_candles`.
+محرّك حتمي في `backend/app/services/backtest/`. يقرأ `gold_candles` فقط (M15/H1/H4/D) ويعيد تشغيل قواعد الاستراتيجيات الخمس شمعة-شمعة **بدون** Claude أو OANDA أو تنفيذ أوامر.
+
+| القاعدة | السلوك |
+| --- | --- |
+| لا lookahead | القرار عند i من `[i-LOOKBACK..i]` فقط؛ الدخول فتح i+1 |
+| أهداف | 1.5R / 3R (سكالب 1R / 1.5R) |
+| خروج | وقف أولاً على نفس الشمعة؛ 50% عند TP1 ثم تعادل؛ الباقي عند TP2 |
+| تكلفة | انزلاق 0.2$ + سبريد 0.35$ تُطرح من كل صفقة |
+| REST | `POST /api/backtest/run` ، `GET /api/backtest/reports` |
+| الواجهة | `/backtest` — ملخص، جدول، منحنى R، مقارنة |
+
+التقارير تُخزَّن في `backtest_reports`. الدليل: `docs/BACKTEST_GUIDE.md`.
 
 ### 10.4 مراقبة الأداء
 
@@ -1099,6 +1123,7 @@ Caddy:
 | i18n عربي/إنجليزي | تم |
 | ~~تقويم اقتصادي حقيقي (USD / ذهب)~~ | تم — Forex Factory + هيكل Trading Economics |
 | ~~بوت قناص ذهب (إشارات فقط)~~ | تم — 3 وكلاء، بوابة مخاطر، بلا تنفيذ |
+| ~~باك تست على gold_candles~~ | تم — محرّك حتمي + `/backtest` |
 
 ### 12.2 تحسينات مستقبلية مقترحة
 
@@ -1106,7 +1131,7 @@ Caddy:
 | --- | --- | --- |
 | ~~تقويم اقتصادي حقيقي~~ | نُفِّذ عبر Forex Factory؛ Trading Economics ما زال هيكلاً | تم |
 | مشاعر أخبار NLP أو تصنيف عناوين | `get_market_sentiment` هيكلي فقط | متوسط |
-| باك تست على `gold_candles` | قياس الماسح لا الطاقم اللغوي | متوسط |
+| ~~باك تست على `gold_candles`~~ | نُفِّذ في `services/backtest` | تم |
 | تنفيذ OANDA (أوراق practice أولاً) | اليوم توصية فقط | عالٍ — مخاطر تشغيلية وقانونية |
 | مستخدمون متعددون / أدوار | المنتج مشغّل واحد | عالٍ — إعادة عزل البيانات |
 | Alembic ترحيلات | `create_all` لا يرقّي أعمدة حية | منخفض–متوسط |
@@ -1129,7 +1154,7 @@ Caddy:
 
 1. إبقاء الاختبارات الخلفية + Vitest خضراء قبل كل نشر.
 2. ~~تقويم اقتصادي حقيقي حتى لا يهلوس الوكيل أحداثاً.~~ تم.
-3. سكربت باك تست للقواعد الهيكلية على مستودع الذهب.
+3. ~~سكربت باك تست للقواعد الهيكلية على مستودع الذهب.~~ تم (`/backtest`).
 4. مقاييس/تنبيه عند `stale` طويل أو 429 متكرر.
 5. عدم فتح التنفيذ الآلي قبل سياسة مكتوبة وحدّ خسائر خارج FoxAgent.
 
@@ -1184,6 +1209,7 @@ foxagent/
 │       ├── risk_rules.py    البوابة
 │       ├── economic_calendar.py
 │       ├── trading_bot/     منسّق + 3 وكلاء ذهب
+│       ├── backtest/        محرّك باك تست حتمي
 │       ├── gold_warehouse.py / gold_sync.py
 │       ├── oanda.py / simulator.py
 │       ├── memory_log.py / reflection.py
@@ -1192,6 +1218,7 @@ foxagent/
 ├── deploy/                  Compose + Caddy + Dockerfiles
 ├── docs/FOXAGENT_REFERENCE_AR.md   هذا المرجع
 ├── docs/TRADING_BOT_GUIDE.md       دليل البوت (عربي/إنجليزي)
+├── docs/BACKTEST_GUIDE.md          دليل الباك تست
 └── README.md
 ```
 

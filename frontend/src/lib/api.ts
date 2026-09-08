@@ -111,6 +111,19 @@ export const api = {
     http<{ performance: import("./types").StrategyPerf[] }>(
       agent ? `/api/bot/performance/${agent}` : "/api/bot/performance"
     ),
+  runBacktest: (body: {
+    timeframe: string;
+    strategyId: string | null;
+    days: number;
+    riskPercent?: number;
+    minRr?: number;
+  }) =>
+    http<import("./types").BacktestReport>("/api/backtest/run", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  backtestReports: () => http<{ reports: import("./types").BacktestReport[] }>("/api/backtest/reports"),
+  backtestReport: (id: string) => http<import("./types").BacktestReport>(`/api/backtest/reports/${id}`),
   streamChat: async (
     body: { message: string; symbol: string; timeframe: string; model: string; sessionId?: string },
     onEvent: (event: { type: string; payload: Record<string, unknown> }) => void,

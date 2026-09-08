@@ -424,6 +424,40 @@ async def bot_performance_agent(agent: str) -> dict:
     return {"agent": agent, "performance": await list_performance(agent)}
 
 
+@router.post("/backtest/run")
+async def backtest_run(body: dict = Body(...)) -> dict:
+    from app.services.backtest.engine import BacktestEngine
+    from app.services.backtest.models import BacktestRunRequest
+
+    req = BacktestRunRequest.model_validate(body)
+    report = await BacktestEngine().run(
+        timeframe=req.timeframe,
+        strategy_id=req.strategyId,
+        days=req.days,
+        risk_percent=req.riskPercent,
+        min_rr=req.minRr,
+        persist=True,
+    )
+    return report.model_dump(mode="json")
+
+
+@router.get("/backtest/reports")
+async def backtest_reports() -> dict:
+    from app.services.backtest.store import list_reports
+
+    return {"reports": await list_reports(20)}
+
+
+@router.get("/backtest/reports/{report_id}")
+async def backtest_report_get(report_id: str) -> dict:
+    from app.services.backtest.store import get_report
+
+    item = await get_report(report_id)
+    if not item:
+        raise HTTPException(404, "Not found")
+    return item
+
+
 @router.get("/models")
 async def models() -> dict:
     return {
