@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bot, Brain, CalendarDays, FileStack, LineChart, MessageSquareText, PanelLeft, PanelLeftClose, Settings, X } from "lucide-react";
+import { Bot, Brain, CalendarDays, FileStack, FlaskConical, LineChart, MessageSquareText, PanelLeft, PanelLeftClose, Settings, X } from "lucide-react";
 import { FoxLogo } from "./FoxLogo";
 import { Conversations } from "./Conversations";
 import { useUi } from "@/stores/ui";
@@ -20,6 +20,7 @@ const NAV: { href: string; match: string; labelKey: MessageKey; icon: typeof Mes
   { href: "/memory", match: "/memory", labelKey: "nav.memory", icon: Brain },
   { href: "/calendar", match: "/calendar", labelKey: "nav.calendar", icon: CalendarDays },
   { href: "/bot", match: "/bot", labelKey: "nav.bot", icon: Bot },
+  { href: "/backtest", match: "/backtest", labelKey: "nav.backtest", icon: FlaskConical },
   { href: "/settings", match: "/settings", labelKey: "nav.settings", icon: Settings },
 ];
 
