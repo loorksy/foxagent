@@ -37,10 +37,33 @@ async def lifespan(app: FastAPI):
     pump = asyncio.create_task(price_pump())
     reflector = asyncio.create_task(_reflection_loop())
     warehouse = asyncio.create_task(gold_sync_loop())
+    from app.services.trading_bot import get_coordinator
+
+    bot = get_coordinator()
+    import os
+
+    autostart = os.environ.get("FOXAGENT_BOT_AUTOSTART", "1").strip().lower() not in {"0", "false", "off", "no"}
+    if autostart:
+        try:
+            runtime = await load_runtime_settings()
+            if getattr(runtime, "botEnabled", False) and not await is_paused_safe():
+                await bot.start()
+        except Exception as exc:
+            logger.warning("Gold bot autostart skipped: %s", exc)
     yield
+    await bot.stop()
     pump.cancel()
     reflector.cancel()
     warehouse.cancel()
+
+
+async def is_paused_safe() -> bool:
+    from app.services.run_control import is_paused
+
+    try:
+        return await is_paused()
+    except Exception:
+        return False
 
 
 async def _reflection_loop() -> None:

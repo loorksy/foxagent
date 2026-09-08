@@ -49,7 +49,11 @@ export function DeskLayout({ children }: { children?: React.ReactNode }) {
         ? "recommendations"
         : pathname.startsWith("/memory")
           ? "memory"
-          : "chat";
+          : pathname.startsWith("/calendar")
+            ? "calendar"
+            : pathname.startsWith("/bot")
+              ? "bot"
+              : "chat";
 
   useEffect(() => {
     useUi.setState({ section });
@@ -173,6 +177,8 @@ export function DeskLayout({ children }: { children?: React.ReactNode }) {
           )}
           {section === "recommendations" && (children || <RecommendationsPage />)}
           {section === "memory" && (children || <MemoryPage />)}
+          {section === "calendar" && children}
+          {section === "bot" && children}
           {section === "settings" && (children || <SettingsPanel />)}
         </main>
       </div>

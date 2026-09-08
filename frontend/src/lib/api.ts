@@ -89,6 +89,28 @@ export const api = {
   systemStatus: () => http<{ paused: boolean }>("/api/system/status"),
   pauseSystem: () => http<{ paused: boolean }>("/api/system/pause", { method: "POST" }),
   resumeSystem: () => http<{ paused: boolean }>("/api/system/resume", { method: "POST" }),
+  economicCalendar: (hoursAhead = 24, minImpact = "medium") =>
+    http<{ events: import("./types").EconomicEvent[]; source: string; cached: boolean; warning?: string }>(
+      `/api/economic-calendar?hours_ahead=${hoursAhead}&min_impact=${minImpact}`
+    ),
+  economicCalendarUpcoming: () =>
+    http<{ events: import("./types").EconomicEvent[]; source: string }>(`/api/economic-calendar/upcoming`),
+  botStatus: () => http<import("./types").BotStatus>("/api/bot/status"),
+  botStart: () => http<import("./types").BotStatus>("/api/bot/start", { method: "POST" }),
+  botStop: () => http<import("./types").BotStatus>("/api/bot/stop", { method: "POST" }),
+  botSignals: () => http<{ signals: import("./types").BotSignal[] }>("/api/bot/signals"),
+  botSignal: (id: string) => http<import("./types").BotSignal>(`/api/bot/signals/${id}`),
+  patchBotSignal: (id: string, patch: Record<string, unknown>) =>
+    http<import("./types").BotSignal>(`/api/bot/signals/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  promoteBotSignal: (id: string) =>
+    http<{ ok: boolean; recommendation?: import("./types").TradeRecommendation }>(
+      `/api/bot/signals/${id}/to-recommendation`,
+      { method: "POST" }
+    ),
+  botPerformance: (agent?: string) =>
+    http<{ performance: import("./types").StrategyPerf[] }>(
+      agent ? `/api/bot/performance/${agent}` : "/api/bot/performance"
+    ),
   streamChat: async (
     body: { message: string; symbol: string; timeframe: string; model: string; sessionId?: string },
     onEvent: (event: { type: string; payload: Record<string, unknown> }) => void,

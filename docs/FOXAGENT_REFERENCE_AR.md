@@ -21,6 +21,8 @@
 1. [نظرة عامة على المشروع](#1-نظرة-عامة-على-المشروع)
 2. [المعمارية التقنية](#2-المعمارية-التقنية)
 3. [مكونات النظام التفصيلية](#3-مكونات-النظام-التفصيلية)
+   - [هـ. التقويم الاقتصادي](#هـ-التقويم-الاقتصادي)
+   - [و. بوت تداول الذهب](#و-بوت-تداول-الذهب)
 4. [سير العمل والمراحل](#4-سير-العمل-والمراحل)
 5. [قاعدة البيانات](#5-قاعدة-البيانات)
 6. [واجهات برمجة التطبيقات](#6-واجهات-برمجة-التطبيقات-apis)
@@ -67,10 +69,10 @@ FoxAgent محطة تداول حوارية (chat-first desk) تربط ثلاثة 
 - **مشغّل واحد محمي بكلمة مرور.** لا حسابات متعددة؛ الجلسة cookie `httpOnly`.
 - **شفافية الطاقم.** يظهر التفكير، الأدوات، النقاش، والاستدعاءات في الواجهة لحظة حدوثها.
 - **عقد توصية ثابت.** نفس JSON يغذّي قاعدة البيانات والشارت وتيليجرام.
-- **إيقاف فوري.** Pause/Resume يوقف تشغيل الوكلاء ومضخّة الأسعار ومزامنة المستودع.
+- **إيقاف فوري.** Pause/Resume يوقف تشغيل الوكلاء ومضخّة الأسعار ومزامنة المستودع وحلقة بوت الذهب.
 - **وضعان للبيانات.** `oanda` عند وجود Token + Account؛ وإلا `simulator` حتمي للتطوير والعرض.
 
-ما **ليس** قيمة المشروع: تدريب نموذج ML محلي، تنفيذ صفقات تلقائي، تقويم اقتصادي من مزوّد ثالث، أو تحليل مشاعر أخبار بـ NLP. هذه فجوات موثّقة في القسم 12.
+ما **ليس** قيمة المشروع: تدريب نموذج ML محلي، **تنفيذ أوامر وساطة**، أو تحليل مشاعر أخبار بـ NLP. التقويم الاقتصادي وبوابة إشارات الذهب مُنفَّذان؛ البوت لا يضع أوامر في السوق.
 
 ---
 
@@ -424,17 +426,50 @@ await emit("recommendation", dumped)
 | الجلسة مسموحة | ساعة UTC مقابل `allowedSessions` | london, ny, asian |
 | سقف المخاطرة الضمنية | `riskPercent` صريح أو `|entry−SL|/entry × 100` | 1.0% |
 
-تداخل لندن/نيويورك يُقبل إن وُجدت `london` أو `ny`. Pause العالمي (`system_paused`) يمنع بدء تشغيل جديد ويثلّج المضخّة والمستودع.
+تداخل لندن/نيويورك يُقبل إن وُجدت `london` أو `ny`. Pause العالمي (`system_paused`) يمنع بدء تشغيل جديد ويثلّج المضخّة والمستودع وحلقة البوت.
 
 **لا يوجد تحديد حجم اللوت أو ربط بحساب وساطة للتنفيذ.** المخاطرة هنا هندسية على السعر لا على رصيد الحساب.
 
 #### توقيت التوصيات
 
 - **يدوي:** المشغّل يرسل رسالة أو `/setup`.
-- **لا يوجد كرون** يطلق الطاقم كل N دقائق.
+- **طاقم المحادثة يدوي.** المشغّل يرسل رسالة أو `/setup`. لا كرون يطلق الطاقم.
+- **بوت الذهب اختياري.** حلقة كل `botScanInterval` ثانية (افتراضي 60) عندما `botEnabled=true` والنظام غير متوقف. الإشارات تمر من البوابة نفسها؛ لا تنفيذ أوامر.
 - الجلسة تُفحص لحظة الحفظ لا لحظة الفكرة.
 - بعد الحفظ تُرسل تيليجرام فوراً (مع إعادة محاولة).
 - تحديث الحالة (`PENDING` → `HIT_TP2` / `STOPPED_OUT`…) يدوي من الواجهة أو عبر `PATCH`؛ حلقة التأمّل تلتقط الحالات الطرفية كل 45 ثانية.
+
+### هـ. التقويم الاقتصادي
+
+مصدر أحداث **USD فقط** لأنها التي تحرّك الذهب مباشرة. لا اختلاق لطبعات.
+
+| الطبقة | الملف | الدور |
+| --- | --- | --- |
+| النموذج | `EconomicEvent` / `EconomicEventRow` | عنوان، وقت، أثر، forecast/previous/actual، `gold_impact` |
+| المزوّد | `ForexFactoryProvider` | كشط `forexfactory.com/calendar` عبر httpx + BeautifulSoup |
+| هيكل مستقبلي | `TradingEconomicsProvider` | هيكل API مدفوع — يعيد `[]` بلا مفتاح |
+| الخدمة | `EconomicCalendarService` | تخزين 5 دقائق، فلتر USD + impact ≥ medium، فشل → قائمة فارغة |
+| الأداة | `get_economic_calendar` | تدمج ساعة الجلسة + `events[]` الحقيقية |
+| REST | `GET /api/economic-calendar` و `/upcoming` | نفس العقد |
+
+`FOXAGENT_CALENDAR_FETCH=0` يعطّل الشبكة (الاختبارات). إن فشل الكشط تبقى `source=session-clock` و`events=[]` — FundamentalAgent ممنوع من اختراع NFP/CPI.
+
+الأثر المتوقع على الذهب (`gold_impact`) استدلال بسيط: طبعة USD أقوى من التوقع → ضغط على الذهب (سالب)، والعكس للبطالة/المطالبات.
+
+### و. بوت تداول الذهب
+
+قناص إشارات **XAU_USD فقط**. لا يرسل أوامر إلى OANDA.
+
+| الوكيل | الملف | المحتوى |
+| --- | --- | --- |
+| المنسّق | `trading_bot/coordinator.py` | حلقة 60ث، Pause يوقفها، `botEnabled` يشغّلها |
+| متعدد الاستراتيجيات | `multi_strategy_agent.py` | 5 استراتيجيات ICT على الذهب |
+| الأنماط | `pattern_notes_agent.py` | 10 أنماط شموع + `pattern_memory` |
+| شمعة الخبر | `news_candle_agent.py` | 4 توقيتات حول أحداث USD |
+
+كل إشارة تمر `enforce_risk_gate` ثم حدود البوت (`botMinRr`, `botMaxRiskPercent`, `botAllowedSessions`). إشارة بثقة > 0.8 يمكن تحويلها إلى `TradeRecommendation` كاملة (overlays + بوابة) عبر `POST /api/bot/signals/{id}/to-recommendation`.
+
+الشموع: مستودع الذهب أولاً (M15/H1/H4/D) ثم OANDA ثم المحاكي. الإطارات الدقيقة (M1/M5) تتجاوز المستودع.
 
 ---
 
@@ -582,6 +617,41 @@ erDiagram
     float volume
     string source
   }
+  economic_events {
+    string id PK
+    string title
+    string country
+    datetime timestamp
+    string impact
+    float forecast
+    float previous
+    float actual
+    string gold_impact
+    bool is_used
+  }
+  bot_signals {
+    string id PK
+    string agent_type
+    string strategy_id
+    string instrument
+    float entry_price
+    float stop_loss
+    float confidence
+    string status
+  }
+  pattern_memory {
+    string id PK
+    string pattern_type
+    int occurrences
+    float win_rate
+  }
+  strategy_performance {
+    string id PK
+    string strategy_id
+    int wins
+    int losses
+    float win_rate
+  }
 ```
 
 ### 5.2 الجداول
@@ -680,8 +750,8 @@ erDiagram
 | --- | --- | --- |
 | GET | `/api/health` | `dataMode`, جاهزية Anthropic (فحص حي مُخزَّن ~120ث)، لقطات SDK، `goldWarehouse` |
 | GET | `/api/system/status` | `{paused}` |
-| POST | `/api/system/pause` | يوقف الطاقم والمضخّة والمستودع |
-| POST | `/api/system/resume` | |
+| POST | `/api/system/pause` | يوقف الطاقم والمضخّة والمستودع وحلقة البوت |
+| POST | `/api/system/resume` | يعيد تشغيل البوت إن كان `botEnabled` |
 | GET | `/api/warehouse/gaps` | تقرير فجوات المستودع |
 
 مثال رد صحة (مختصر):
@@ -746,6 +816,12 @@ erDiagram
 | GET/PUT | `/api/settings` |
 | POST | `/api/settings/validate` `target=anthropic|oanda|telegram` |
 | GET | `/api/models` |
+| GET | `/api/economic-calendar?hours_ahead=24&min_impact=medium` | أحداث USD + مصدر + cached |
+| GET | `/api/economic-calendar/upcoming` | نافذة 48 ساعة |
+| GET/POST | `/api/bot/status` `/start` `/stop` | حالة وتشغيل حلقة الذهب |
+| GET/PATCH | `/api/bot/signals` `/signals/{id}` | آخر 50 إشارة + تحديث الحالة |
+| POST | `/api/bot/signals/{id}/to-recommendation` | تحويل إن الثقة > 0.8 |
+| GET | `/api/bot/performance` `/performance/{agent}` | win rate لكل استراتيجية |
 
 `GET /api/settings` يعيد `SettingsPublic` (المفاتيح مقنّعة: هل وُضعت أم لا) دون تسريب السر.
 
@@ -780,20 +856,27 @@ erDiagram
 
 المستودع **لا** يرسم الشمعة الجارية؛ التشكيل الحي من التيار فقط.
 
-### 7.4 الإعدادات (`/settings`)
+### 7.4 التقويم (`/calendar`) والبوت (`/bot`)
+
+- `/calendar`: جدول أحداث USD، تلوين الأثر (أحمر/برتقالي/أصفر)، عدّاد للحدث التالي، سهم أثر الذهب.
+- `/bot`: تشغيل/إيقاف، بطاقات الوكلاء الثلاثة، اختيار الاستراتيجيات، الإشارات الحيّة، زر «تحويل لتوصية»، والتقويم المضمّن.
+- الشريط الجانبي: «التقويم» و«البوت».
+
+### 7.5 الإعدادات (`/settings`)
 
 - Anthropic / OANDA (practice|live) / Telegram.
 - `maxRiskPercent`, `minRiskReward`, الجلسات المسموحة.
+- تفعيل بوت الذهب وفترة المسح.
 - تحقق حي للمفتاح (`validate`).
 - **Pause agent / Resume** — مفتاح القتل.
 - الأسرار لا تُعاد إلى الحقول؛ الحفظ يدمج القيم الجديدة مع المخزَّن.
 
-### 7.5 التنبيهات
+### 7.6 التنبيهات
 
 | القناة | السلوك |
 | --- | --- |
-| تيليجرام | HTML + صورة شارت عند حفظ توصية؛ يفشل مغلقاً إن نُقص التوكن |
-| الواجهة | أحداث SSE فورية |
+| تيليجرام | HTML + صورة شارت عند حفظ توصية؛ إشارات البوت ونتائجها وملخص يومي |
+| الواجهة | أحداث SSE فورية + صفحة البوت كل 15ث |
 | لا يوجد | بريد، دفع متصفح، SMS |
 
 `AuthGate`: أي 401 على `/api/auth/me` يعيد التوجيه إلى `/login?next=…`.
@@ -1014,12 +1097,14 @@ Caddy:
 | إخفاء Artifacts الفارغة + أول Vitest | تم |
 | تيليجرام + لقطة | تم |
 | i18n عربي/إنجليزي | تم |
+| ~~تقويم اقتصادي حقيقي (USD / ذهب)~~ | تم — Forex Factory + هيكل Trading Economics |
+| ~~بوت قناص ذهب (إشارات فقط)~~ | تم — 3 وكلاء، بوابة مخاطر، بلا تنفيذ |
 
 ### 12.2 تحسينات مستقبلية مقترحة
 
 | الفكرة | لماذا | تعقيد تقني |
 | --- | --- | --- |
-| تقويم اقتصادي حقيقي (Forex Factory / مزوّد مدفوع) | FundamentalAgent اليوم بلا طبعات | متوسط — عقد أداة جديد + أسرار |
+| ~~تقويم اقتصادي حقيقي~~ | نُفِّذ عبر Forex Factory؛ Trading Economics ما زال هيكلاً | تم |
 | مشاعر أخبار NLP أو تصنيف عناوين | `get_market_sentiment` هيكلي فقط | متوسط |
 | باك تست على `gold_candles` | قياس الماسح لا الطاقم اللغوي | متوسط |
 | تنفيذ OANDA (أوراق practice أولاً) | اليوم توصية فقط | عالٍ — مخاطر تشغيلية وقانونية |
@@ -1032,7 +1117,7 @@ Caddy:
 
 ### 12.3 تكاملات محتملة
 
-- تقويم اقتصادي مدفوع.
+- تفعيل Trading Economics بمفتاح مدفوع (الهيكل جاهز).
 - Slack بدلاً من/إضافة إلى تيليجرام.
 - وسيط ثانٍ للقراءة فقط (حساب تجريبي).
 - تصدير CSV/Notion لدفتر الدروس.
@@ -1042,8 +1127,8 @@ Caddy:
 
 الأولوية المنطقية إن بقي المنتج لمشغّل واحد:
 
-1. إبقاء الاختبارات 100+3 خضراء قبل كل نشر.
-2. تقويم اقتصادي حقيقي حتى لا يهلوس الوكيل أحداثاً.
+1. إبقاء الاختبارات الخلفية + Vitest خضراء قبل كل نشر.
+2. ~~تقويم اقتصادي حقيقي حتى لا يهلوس الوكيل أحداثاً.~~ تم.
 3. سكربت باك تست للقواعد الهيكلية على مستودع الذهب.
 4. مقاييس/تنبيه عند `stale` طويل أو 429 متكرر.
 5. عدم فتح التنفيذ الآلي قبل سياسة مكتوبة وحدّ خسائر خارج FoxAgent.
@@ -1060,6 +1145,9 @@ Caddy:
 | `/model sonnet` | يحل إلى `claude-sonnet-4-5` |
 | `/pair xauusd` | يضبط الرمز |
 | `/overlay clear` | يمسح overlays المحلية |
+| صفحة `/bot` تشغيل | يبدأ حلقة المسح إن لم يكن Pause |
+| صفحة `/bot` إيقاف | يوقف الحلقة ويحفظ `botEnabled=false` |
+| تحويل لتوصية | إشارة بثقة > 0.8 → توصية كاملة عبر البوابة |
 
 ## ملحق ب — متغيرات البيئة ذات الصلة
 
@@ -1072,6 +1160,8 @@ Caddy:
 | `REDIS_URL` | حافلة اختيارية |
 | `FOXAGENT_DATA_DIR` | مكان `.foxagent.key` وDB |
 | `GOLD_WAREHOUSE_SYNC` | `0` يعطّل المزامنة (الاختبارات) |
+| `FOXAGENT_CALENDAR_FETCH` | `0` يمنع كشط Forex Factory |
+| `FOXAGENT_BOT_AUTOSTART` | `0` يمنع تشغيل البوت عند إقلاع الاختبارات |
 | `ANTHROPIC_API_KEY` | يُفضَّل حفظه من الإعدادات لا من Compose |
 | `OANDA_API_TOKEN` / `OANDA_ACCOUNT_ID` / `OANDA_ENVIRONMENT` | كذلك عبر الإعدادات المشفّرة |
 | `SETTINGS_SECRET` | لا تستخدمه إن وُجد مفتاح حجم مسبقاً |
@@ -1089,16 +1179,19 @@ foxagent/
 │   └── services/
 │       ├── crew.py          الطاقم والنقاش
 │       ├── agent.py         العقد والنماذج
-│       ├── mcp_tools.py     13 أداة
+│       ├── mcp_tools.py     13 أداة (التقويم يضيف events[])
 │       ├── analysis.py      ICT الحتمي
 │       ├── risk_rules.py    البوابة
+│       ├── economic_calendar.py
+│       ├── trading_bot/     منسّق + 3 وكلاء ذهب
 │       ├── gold_warehouse.py / gold_sync.py
 │       ├── oanda.py / simulator.py
 │       ├── memory_log.py / reflection.py
 │       └── settings_store.py / telegram_service.py
-├── frontend/src/            المكتب، الشارت، i18n
+├── frontend/src/            المكتب، الشارت، التقويم، البوت، i18n
 ├── deploy/                  Compose + Caddy + Dockerfiles
 ├── docs/FOXAGENT_REFERENCE_AR.md   هذا المرجع
+├── docs/TRADING_BOT_GUIDE.md       دليل البوت (عربي/إنجليزي)
 └── README.md
 ```
 

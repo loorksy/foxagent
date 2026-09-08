@@ -195,6 +195,23 @@ class SettingsPayload(BaseModel):
     telegramBotToken: str = ""
     telegramChatId: str = ""
     enableTelegramNotifications: bool = False
+    botEnabled: bool = False
+    botScanInterval: int = 60
+    botAgents: list[str] = Field(default_factory=lambda: ["multi_strategy", "pattern_notes", "news_candle"])
+    botActiveStrategies: list[str] = Field(
+        default_factory=lambda: [
+            "gold_liquidity_sniper",
+            "gold_breakout",
+            "gold_trend_follow",
+            "gold_reversal",
+            "gold_scalp",
+        ]
+    )
+    botMaxRiskPercent: float = 1.0
+    botMinRr: float = 2.0
+    botAllowedSessions: list[str] = Field(default_factory=lambda: ["london", "ny", "asian"])
+    economicCalendarProvider: str = "forex_factory"
+    economicCalendarCacheTtl: int = 5
 
 
 class SettingsPublic(BaseModel):
@@ -213,6 +230,15 @@ class SettingsPublic(BaseModel):
     telegramChatId: str = ""
     enableTelegramNotifications: bool = False
     telegramConfigured: bool = False
+    botEnabled: bool = False
+    botScanInterval: int = 60
+    botAgents: list[str] = Field(default_factory=list)
+    botActiveStrategies: list[str] = Field(default_factory=list)
+    botMaxRiskPercent: float = 1.0
+    botMinRr: float = 2.0
+    botAllowedSessions: list[str] = Field(default_factory=list)
+    economicCalendarProvider: str = "forex_factory"
+    economicCalendarCacheTtl: int = 5
 
 
 class WsEvent(BaseModel):

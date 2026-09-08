@@ -322,3 +322,97 @@ def schedule_trade_alert(rec: TradeRecommendation) -> None:
 
 def reset_alert_dedupe() -> None:
     _alerted_ids.clear()
+
+
+def _schedule(coro_factory) -> None:
+    async def _runner() -> None:
+        try:
+            await coro_factory()
+        except Exception:
+            logger.debug("Telegram background task failed", exc_info=True)
+
+    try:
+        asyncio.get_running_loop().create_task(_runner())
+    except RuntimeError:
+        logger.debug("No running event loop; Telegram bot message not scheduled")
+
+
+async def send_bot_signal(signal: dict[str, Any]) -> dict[str, Any]:
+    token, chats, enabled = await _telegram_credentials()
+    if not telegram_ready(token, chats, enabled):
+        return {"ok": False, "skipped": True}
+    side = str(signal.get("signalType") or "").upper()
+    text = (
+        f"<b>FOXAGENT GOLD BOT</b>\n"
+        f"{_esc(signal.get('strategyId'))} · {_esc(side)}\n"
+        f"Entry <code>{_esc(signal.get('entryPrice'))}</code>  SL <code>{_esc(signal.get('stopLoss'))}</code>\n"
+        f"R:R 1:{_esc(signal.get('riskReward'))}  conf {_esc(signal.get('confidence'))}"
+    )
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await _post_with_retry(
+                client,
+                f"{TELEGRAM_API}/bot{token}/sendMessage",
+                data={"chat_id": chats[0], "text": text, "parse_mode": "HTML"},
+            )
+        return {"ok": resp.status_code < 400}
+    except Exception as exc:
+        return {"ok": False, "detail": str(exc)[:200]}
+
+
+async def send_bot_result(signal: dict[str, Any], pnl: float) -> dict[str, Any]:
+    token, chats, enabled = await _telegram_credentials()
+    if not telegram_ready(token, chats, enabled):
+        return {"ok": False, "skipped": True}
+    text = (
+        f"<b>GOLD BOT RESULT</b> {_esc(signal.get('status'))}\n"
+        f"{_esc(signal.get('strategyId'))}  PnL {_esc(f'{pnl:+.2f}')}"
+    )
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await _post_with_retry(
+                client,
+                f"{TELEGRAM_API}/bot{token}/sendMessage",
+                data={"chat_id": chats[0], "text": text, "parse_mode": "HTML"},
+            )
+        return {"ok": resp.status_code < 400}
+    except Exception as exc:
+        return {"ok": False, "detail": str(exc)[:200]}
+
+
+async def send_daily_summary() -> dict[str, Any]:
+    from app.services.trading_bot.store import list_performance, list_signals
+
+    token, chats, enabled = await _telegram_credentials()
+    if not telegram_ready(token, chats, enabled):
+        return {"ok": False, "skipped": True}
+    signals = await list_signals(50)
+    perf = await list_performance()
+    wins = sum(1 for s in signals if s.get("status") == "won")
+    text = (
+        f"<b>GOLD BOT DAILY</b>\n"
+        f"Signals {len(signals)} · wins {wins}\n"
+        f"Books {len(perf)}"
+    )
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await _post_with_retry(
+                client,
+                f"{TELEGRAM_API}/bot{token}/sendMessage",
+                data={"chat_id": chats[0], "text": text, "parse_mode": "HTML"},
+            )
+        return {"ok": resp.status_code < 400}
+    except Exception as exc:
+        return {"ok": False, "detail": str(exc)[:200]}
+
+
+def schedule_bot_signal(signal: dict[str, Any]) -> None:
+    _schedule(lambda: send_bot_signal(signal))
+
+
+def schedule_bot_result(signal: dict[str, Any], pnl: float) -> None:
+    _schedule(lambda: send_bot_result(signal, pnl))
+
+
+def schedule_daily_summary() -> None:
+    _schedule(send_daily_summary)
