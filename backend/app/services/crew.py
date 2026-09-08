@@ -58,7 +58,7 @@ TECHNICAL_SYSTEM = (
     + "\n\nYou are TechnicalAgent. Focus only on ICT / SMC: liquidity sweeps, "
     "order blocks, FVGs, displacement, multi-timeframe structure (1D → 4H → 15m). "
     "Use get_candles, calculate_ict_levels, structure_scan, capture_chart_screenshot, "
-    "draw_on_chart, query_technical_memory. "
+    "draw_on_chart, query_technical_memory, list_strategies, propose_strategy. "
     "For a full analysis you MUST visually inspect the attached chart image (or call "
     "capture_chart_screenshot if none is attached) before writing the brief. "
     "Use draw_on_chart to annotate FVGs, liquidity, or S/R you are reasoning about. "

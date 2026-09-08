@@ -124,6 +124,35 @@ export const api = {
     }),
   backtestReports: () => http<{ reports: import("./types").BacktestReport[] }>("/api/backtest/reports"),
   backtestReport: (id: string) => http<import("./types").BacktestReport>(`/api/backtest/reports/${id}`),
+  strategies: (status?: string) =>
+    http<{ strategies: import("./types").StrategyRule[] }>(
+      status ? `/api/strategies?status=${encodeURIComponent(status)}` : "/api/strategies"
+    ),
+  strategiesProposed: () => http<{ strategies: import("./types").StrategyRule[] }>("/api/strategies/proposed"),
+  strategy: (id: string) => http<import("./types").StrategyRule>(`/api/strategies/${id}`),
+  createStrategy: (body: Record<string, unknown>) =>
+    http<{ ok: boolean; strategy?: import("./types").StrategyRule; detail?: string }>("/api/strategies", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  patchStrategy: (id: string, body: Record<string, unknown>) =>
+    http<{ ok: boolean; strategy?: import("./types").StrategyRule; detail?: string }>(`/api/strategies/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteStrategy: (id: string) => http<{ ok: boolean; deleted?: string }>(`/api/strategies/${id}`, { method: "DELETE" }),
+  validateStrategy: (id: string, body?: Record<string, unknown>) =>
+    http<import("./types").StrategyValidation>(`/api/strategies/${id}/validate`, {
+      method: "POST",
+      body: JSON.stringify(body || {}),
+    }),
+  approveStrategy: (id: string) =>
+    http<{ ok: boolean; strategy?: import("./types").StrategyRule }>(`/api/strategies/${id}/approve`, { method: "POST" }),
+  rejectStrategy: (id: string, reason = "") =>
+    http<{ ok: boolean; strategy?: import("./types").StrategyRule }>(`/api/strategies/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
   streamChat: async (
     body: { message: string; symbol: string; timeframe: string; model: string; sessionId?: string },
     onEvent: (event: { type: string; payload: Record<string, unknown> }) => void,

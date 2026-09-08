@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useSettings } from "@/stores/settings";
+import { useStrategyLab } from "@/stores/strategyLab";
 import { useT, type MessageKey } from "@/i18n";
 
 const AGENTS = ["multi_strategy", "pattern_notes", "news_candle"] as const;
@@ -24,11 +25,16 @@ export function StrategySelector() {
   const patchForm = useSettings((s) => s.patchForm);
   const load = useSettings((s) => s.load);
   const save = useSettings((s) => s.save);
+  const labItems = useStrategyLab((s) => s.items);
+  const loadLab = useStrategyLab((s) => s.load);
   const t = useT();
 
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadLab();
+  }, [load, loadLab]);
+
+  const extras = labItems.filter((r) => r.status === "active" && r.source !== "builtin");
 
   return (
     <section className="space-y-4 rounded-xl border border-border bg-card p-4">
@@ -46,17 +52,22 @@ export function StrategySelector() {
         ))}
       </div>
       <div className="flex flex-wrap gap-2">
-        {STRATEGIES.map((id) => (
-          <label key={id} className="flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs">
-            <input
-              type="checkbox"
-              checked={(form.botActiveStrategies || STRATEGIES).includes(id)}
-              onChange={() => patchForm({ botActiveStrategies: toggle(form.botActiveStrategies || [...STRATEGIES], id) })}
-            />
-            {t(`bot.strategy.${id}` as MessageKey)}
-          </label>
-        ))}
-      </div>
+          {STRATEGIES.map((id) => (
+            <label key={id} className="flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs">
+              <input
+                type="checkbox"
+                checked={(form.botActiveStrategies || STRATEGIES).includes(id)}
+                onChange={() => patchForm({ botActiveStrategies: toggle(form.botActiveStrategies || [...STRATEGIES], id) })}
+              />
+              {t(`bot.strategy.${id}` as MessageKey)}
+            </label>
+          ))}
+          {extras.map((rule) => (
+            <span key={rule.id} className="rounded-full border border-buy/40 bg-buy/10 px-3 py-1 text-xs text-buy">
+              {rule.name}
+            </span>
+          ))}
+        </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="text-xs text-muted-foreground">
           {t("bot.maxRisk")}

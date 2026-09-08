@@ -55,7 +55,9 @@ export function DeskLayout({ children }: { children?: React.ReactNode }) {
               ? "bot"
               : pathname.startsWith("/backtest")
                 ? "backtest"
-                : "chat";
+                : pathname.startsWith("/strategy-lab")
+                  ? "strategyLab"
+                  : "chat";
 
   useEffect(() => {
     useUi.setState({ section });
@@ -182,6 +184,7 @@ export function DeskLayout({ children }: { children?: React.ReactNode }) {
           {section === "calendar" && children}
           {section === "bot" && children}
           {section === "backtest" && children}
+          {section === "strategyLab" && children}
           {section === "settings" && (children || <SettingsPanel />)}
         </main>
       </div>

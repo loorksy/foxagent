@@ -14,11 +14,11 @@ from app.services.analysis import StructureReport, analyze_structure
 from app.services.gold_warehouse import load_latest, warehouse_tf
 from app.services.macro_feed import current_session
 from app.services.trading_bot.multi_strategy_agent import (
-    CHECKERS,
     _aligned_fvg,
     _aligned_ob,
     atr,
-    build_strategy_signal,
+    build_rule_signal,
+    evaluate_rule,
 )
 from app.services.backtest.models import BacktestReport, BacktestTrade
 from app.services.backtest.rules import (
@@ -164,31 +164,33 @@ def simulate_trade(
     }
 
 
-def strategy_stop(strategy_id: str, candles: list[OHLCV], report: StructureReport, side: str, fill: float) -> float:
+def strategy_stop(strategy_id: str, candles: list[OHLCV], report: StructureReport, side: str, fill: float, stop_rule: str = "") -> float:
     range_atr = atr(candles)
     last = candles[-1]
-    if strategy_id == "gold_liquidity_sniper":
+    text = f"{strategy_id} {stop_rule}".lower()
+    if strategy_id == "gold_liquidity_sniper" or "sweep" in text:
         return last.low - 0.5 * range_atr if side == "buy" else last.high + 0.5 * range_atr
-    if strategy_id == "gold_breakout":
+    if strategy_id == "gold_breakout" or "asian range" in text:
         return report.asian_low if side == "buy" else report.asian_high
-    if strategy_id == "gold_trend_follow":
+    if strategy_id == "gold_trend_follow" or "ob" in text or "fvg" in text:
         zone = _aligned_fvg(report, side) or _aligned_ob(report, side)
         if zone:
             return zone.low - 0.15 * range_atr if side == "buy" else zone.high + 0.15 * range_atr
         return last.low - 0.5 * range_atr if side == "buy" else last.high + 0.5 * range_atr
-    if strategy_id == "gold_reversal":
+    if strategy_id == "gold_reversal" or "wick" in text or "rejection" in text:
         return last.low - 0.1 * range_atr if side == "buy" else last.high + 0.1 * range_atr
+    if strategy_id == "gold_scalp" or "0.5" in text:
+        return fill - 0.5 * range_atr if side == "buy" else fill + 0.5 * range_atr
     return fill - 0.5 * range_atr if side == "buy" else fill + 0.5 * range_atr
 
 
-def conditions_ok(strategy_id: str, report: StructureReport) -> bool:
-    rules = STRATEGY_RULES.get(strategy_id) or {}
-    conds = rules.get("conditions") or {}
-    if conds.get("asian_sweep") and not report.liquidity_sweep:
+def conditions_ok(conds: dict[str, Any] | None, report: StructureReport) -> bool:
+    flags = conds or {}
+    if flags.get("asian_sweep") and not report.liquidity_sweep:
         return False
-    if conds.get("fvg_exists") and not report.fvgs:
+    if flags.get("fvg_exists") and not report.fvgs:
         return False
-    if conds.get("bos_confirmed") and not report.last_bos:
+    if flags.get("bos_confirmed") and not report.last_bos:
         return False
     return True
 
@@ -229,6 +231,26 @@ def profit_factor(trades: list[BacktestTrade]) -> float:
     return round(gains / losses, 4)
 
 
+async def _resolve_rules(timeframe: str, strategy_id: str | None, extra: Any | None):
+    from app.services.trading_bot.strategy_library import get_library
+    from app.services.trading_bot.strategy_schema import builtin_rules
+
+    if extra is not None and timeframe in getattr(extra, "timeframes", []):
+        if strategy_id is None or extra.id == strategy_id:
+            return [extra]
+    try:
+        lib = get_library()
+        if strategy_id:
+            rule = await lib.get(strategy_id)
+            return [rule] if rule and timeframe in rule.timeframes else []
+        return await lib.list_runnable(timeframe)
+    except Exception:
+        fallback = builtin_rules()
+        if strategy_id:
+            return [r for r in fallback if r.id == strategy_id and timeframe in r.timeframes]
+        return [r for r in fallback if timeframe in r.timeframes]
+
+
 async def load_warehouse_window(timeframe: str, days: int, lookback: int = LOOKBACK) -> list[OHLCV]:
     tf = warehouse_tf(timeframe)
     if tf is None:
@@ -253,14 +275,15 @@ class BacktestEngine:
         min_rr: float = 2.0,
         candles: list[OHLCV] | None = None,
         persist: bool = False,
+        rule: Any | None = None,
     ) -> BacktestReport:
         tf = warehouse_tf(timeframe) or timeframe.upper()
         if tf not in WAREHOUSE_TFS:
             raise ValueError(f"Backtest supports {WAREHOUSE_TFS} only")
         series = list(candles) if candles is not None else await load_warehouse_window(tf, days)
         series.sort(key=lambda c: c.timestamp)
-        wanted = [strategy_id] if strategy_id else list(STRATEGY_RULES)
-        wanted = [s for s in wanted if s in STRATEGY_RULES and tf in STRATEGY_RULES[s]["timeframes"]]
+        wanted_rules = await _resolve_rules(tf, strategy_id, rule)
+        wanted = [r.id for r in wanted_rules]
         trades: list[BacktestTrade] = []
         busy_until: dict[str, int] = {}
         start = min(LOOKBACK, max(20, len(series) // 4))
@@ -269,34 +292,32 @@ class BacktestEngine:
             if len(window) < 20:
                 continue
             report = analyze_structure(window)
-            for sid in wanted:
+            for item in wanted_rules:
+                sid = item.id
                 if i <= busy_until.get(sid, -1):
                     continue
-                checker = CHECKERS.get(sid)
-                if checker is None or not checker(window, report) or not conditions_ok(sid, report):
+                if not evaluate_rule(item, window, report) or not conditions_ok(item.entry_conditions, report):
                     continue
-                built = build_strategy_signal(sid, window, report, tf)
+                built = build_rule_signal(item, window, report, tf)
                 if not built:
                     continue
                 side = built["signalType"]
                 nxt = series[i + 1]
                 fill = apply_slippage(side, nxt.open)
-                stop = strategy_stop(sid, window, report, side, fill)
+                stop = strategy_stop(sid, window, report, side, fill, item.stop_rule)
                 if side == "buy" and stop >= fill:
                     stop = fill - max(atr(window) * 0.35, 0.2)
                 if side == "sell" and stop <= fill:
                     stop = fill + max(atr(window) * 0.35, 0.2)
-                rules = STRATEGY_RULES[sid]
-                tp1_r = float(rules["tp1"])
-                tp2_r = float(rules["tp2"])
+                tp1_r = float(item.tp1_r)
+                tp2_r = float(item.tp2_r)
                 if tp2_r + 1e-9 < min_rr:
                     continue
                 tp1, tp2, risk = r_targets(fill, stop, side, tp1_r, tp2_r)
                 if risk / max(abs(fill), 1.0) * 100.0 > max(risk_percent, 0.05) * 20:
-                    # implied stop wider than 20× configured risk % — skip pathological stops
                     if abs(fill - stop) / max(abs(fill), 1.0) > 0.05:
                         continue
-                path = series[i + 1 : i + 1 + int(rules["max_holding_bars"])]
+                path = series[i + 1 : i + 1 + int(item.max_holding_bars)]
                 if not path:
                     continue
                 sim = simulate_trade(
@@ -308,7 +329,7 @@ class BacktestEngine:
                     tp1_r=tp1_r,
                     tp2_r=tp2_r,
                     bars=path,
-                    max_holding_bars=int(rules["max_holding_bars"]),
+                    max_holding_bars=int(item.max_holding_bars),
                 )
                 exit_time = sim["exitTime"] or path[-1].time
                 trade = BacktestTrade(

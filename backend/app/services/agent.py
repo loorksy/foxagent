@@ -70,6 +70,12 @@ Output contract (final message MUST contain a single JSON object, no markdown fe
 Overlay timestamps MUST be real candle timestamps in milliseconds from get_candles.
 Respect minimum R:R of 1:2. Prefer LIMIT entries at FVG / OB equilibrium.
 Call send_recommendation with the same JSON when complete.
+
+Strategy Lab (XAU_USD only — never invent other pairs):
+- list_strategies shows the single library the gold bot and backtest read from.
+- propose_strategy saves a draft. Explain the idea, then wait for the operator before validate_strategy unless they explicitly ask to backtest it.
+- validate_strategy runs the warehouse backtest (~2 years). Pause blocks validation. A strategy becomes live only after it clears the thresholds.
+- Do not edit or delete builtin strategies.
 """ + ARTIFACT_PROTOCOL
 
 

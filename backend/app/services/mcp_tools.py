@@ -123,6 +123,39 @@ async def persist_recommendation(payload: dict[str, Any] | TradeRecommendation, 
     return {"ok": True, "recommendation": dumped}
 
 
+async def tool_propose_strategy(payload: dict[str, Any] | None = None, emit: Emit | None = None) -> dict[str, Any]:
+    """اقتراح استراتيجية ذهب جديدة — تُحفظ كمسودة."""
+    from app.services.trading_bot.strategy_library import get_library
+
+    body = dict(payload or {})
+    result = await get_library().propose(body, source="claude_proposed", created_by="claude")
+    if result.get("ok"):
+        sink = emit or _current_emit.get()
+        if sink:
+            await sink("strategy_proposal", result.get("strategy") or {})
+    return result
+
+
+async def tool_validate_strategy(strategy_id: str, emit: Emit | None = None) -> dict[str, Any]:
+    """تشغيل باك تست على استراتيجية مقترحة واعتمادها إن تجاوزت الحدود."""
+    from app.services.trading_bot.strategy_library import get_library
+
+    result = await get_library().validate(strategy_id, days=730, auto_activate=True)
+    sink = emit or _current_emit.get()
+    if sink:
+        await sink("strategy_validation", {k: result.get(k) for k in ("ok", "passed", "reasons", "strategy")})
+    return result
+
+
+async def tool_list_strategies(status: str = "active") -> dict[str, Any]:
+    from app.services.trading_bot.strategy_library import get_library
+
+    rows = await get_library().get_all()
+    if status and status != "all":
+        rows = [r for r in rows if r.status == status]
+    return {"strategies": [r.model_dump(mode="json") for r in rows]}
+
+
 async def tool_draw_on_chart(overlays: list[dict[str, Any]] | None, emit: Emit | None = None) -> dict[str, Any]:
     """Emit additive chart overlays the model chose during analysis."""
     parsed: list[dict[str, Any]] = []
@@ -303,6 +336,42 @@ def mcp_tool_specs() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "propose_strategy",
+            "description": "Propose a new XAU_USD strategy as a draft. Gold only. Operator must validate via backtest.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "description": {"type": "string"},
+                    "timeframes": {"type": "array", "items": {"type": "string"}},
+                    "direction": {"type": "string", "enum": ["buy", "sell", "both"]},
+                    "entry_conditions": {"type": "object"},
+                    "stop_rule": {"type": "string"},
+                    "tp1_r": {"type": "number"},
+                    "tp2_r": {"type": "number"},
+                    "max_holding_bars": {"type": "integer"},
+                },
+                "required": ["name"],
+            },
+        },
+        {
+            "name": "validate_strategy",
+            "description": "Run the warehouse backtest on a drafted gold strategy and activate it if thresholds pass.",
+            "input_schema": {
+                "type": "object",
+                "properties": {"strategy_id": {"type": "string"}},
+                "required": ["strategy_id"],
+            },
+        },
+        {
+            "name": "list_strategies",
+            "description": "List gold strategies in the library (active, draft, rejected, or all).",
+            "input_schema": {
+                "type": "object",
+                "properties": {"status": {"type": "string"}},
+            },
+        },
+        {
             "name": "record_post_trade_reflection",
             "description": "Write a lesson-learned against a closed recommendation (TP / SL / expire).",
             "input_schema": {
@@ -373,6 +442,15 @@ async def dispatch_tool(name: str, args: dict[str, Any], emit: Emit | None = Non
         )
     if name == "draw_on_chart":
         return await tool_draw_on_chart(args.get("overlays") or [], emit)
+    if name == "propose_strategy":
+        return await tool_propose_strategy(args, emit)
+    if name == "validate_strategy":
+        return await tool_validate_strategy(
+            str(args.get("strategy_id") or args.get("strategyId") or args.get("id") or ""),
+            emit,
+        )
+    if name == "list_strategies":
+        return await tool_list_strategies(str(args.get("status") or "active"))
     raise ValueError(f"Unknown tool: {name}")
 
 
@@ -503,6 +581,35 @@ def try_build_sdk_server():
         )
         return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
 
+    @tool(
+        "propose_strategy",
+        "Propose a new XAU_USD strategy draft. Gold only.",
+        {
+            "name": str,
+            "description": str,
+            "timeframes": list,
+            "direction": str,
+            "entry_conditions": dict,
+            "stop_rule": str,
+            "tp1_r": float,
+            "tp2_r": float,
+            "max_holding_bars": int,
+        },
+    )
+    async def propose_strategy(args: dict[str, Any]) -> dict[str, Any]:
+        data = await tool_propose_strategy(args)
+        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
+
+    @tool("validate_strategy", "Backtest a drafted gold strategy on the warehouse.", {"strategy_id": str})
+    async def validate_strategy(args: dict[str, Any]) -> dict[str, Any]:
+        data = await tool_validate_strategy(str(args.get("strategy_id") or args.get("id") or ""))
+        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
+
+    @tool("list_strategies", "List gold strategies in the library.", {"status": str})
+    async def list_strategies(args: dict[str, Any]) -> dict[str, Any]:
+        data = await tool_list_strategies(str(args.get("status") or "active"))
+        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
+
     return create_sdk_mcp_server(
         name="oanda",
         version="1.0.0",
@@ -521,5 +628,8 @@ def try_build_sdk_server():
             validate_risk,
             record_reflection,
             draw_on_chart,
+            propose_strategy,
+            validate_strategy,
+            list_strategies,
         ],
     )

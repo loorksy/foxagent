@@ -5,6 +5,7 @@ import { AgentAvatar } from "./AgentAvatar";
 import { ChatComposer } from "./ChatComposer";
 import { ChatThinking } from "./ChatThinking";
 import { RecommendationCard } from "./RecommendationCard";
+import { StrategyProposalCard } from "@/components/strategy-lab/StrategyProposalCard";
 import { ArtifactsWorkspace } from "./ArtifactsWorkspace";
 import { useChat } from "@/stores/chat";
 import { useRecommendations } from "@/stores/recommendations";
@@ -112,6 +113,9 @@ export function ChatPanel() {
                               .filter((r) => r.id === m.recommendationId)
                               .map((r) => <RecommendationCard key={r.id} rec={r} />)
                           : null}
+                        {!m.streaming && m.strategyProposal ? (
+                          <StrategyProposalCard rule={m.strategyProposal} validation={m.strategyValidation} />
+                        ) : null}
                         {!m.streaming && m.text ? (
                           m.recommendationId && m.text.length > 200 ? (
                             <details className="group mt-2 rounded-lg border border-border/50 bg-muted/20">
