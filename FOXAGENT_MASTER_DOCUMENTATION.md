@@ -370,7 +370,7 @@ WAREHOUSE_TFS = M15 | H1 | H4 | D
 | `bos_confirmed` | `bos` |
 | `reversal` | `ob_reject` |
 
-`dsl_from_flags` يبني `{sessions, triggers, conditions}`. إن لم يُشعل أي علم فالمحرك الافتراضي `["fvg"]`. `sanitize_sessions` يقبل aliases: `asian→asia`, `london-ny/overlap→london_ny_overlap`. إن خلت القائمة تُستخدم كل الجلسات.
+`dsl_from_flags` يبني `{sessions, triggers, conditions}`. إن لم يُشعل أي علم فالمحفّز الافتراضي `["fvg"]`. `sanitize_sessions` يقبل aliases: `asian→asia`, `london-ny/overlap→london_ny_overlap`. إن خلت القائمة تُستخدم كل الجلسات.
 
 نموذج `StrategyRule`: `id, name, description, timeframes, direction∈{buy,sell,both}, entry_conditions, sessions, dsl, pinned, stop_rule, tp1_r=1.5, tp2_r=3.0, max_holding_bars=48, source∈{builtin,claude_proposed,manual}, status∈{draft,validated,active,rejected,archived,experimenting}`.
 
