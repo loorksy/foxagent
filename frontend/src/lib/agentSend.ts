@@ -107,6 +107,22 @@ export async function sendAgentMessage(raw: string) {
         const p = event.payload || {};
         const type = event.type;
         if (type === "run_start" && p.runId) useChat.setState({ runId: String(p.runId) });
+        if (type === "usage" || (type === "run_complete" && p.usage && typeof p.usage === "object")) {
+          const raw = (type === "usage" ? p : p.usage) as Record<string, unknown>;
+          useChat.getState().applyUsage({
+            inputTokens: Number(raw.inputTokens || 0),
+            outputTokens: Number(raw.outputTokens || 0),
+            cacheCreationTokens: Number(raw.cacheCreationTokens || 0),
+            cacheReadTokens: Number(raw.cacheReadTokens || 0),
+            totalTokens: Number(raw.totalTokens || 0),
+            estimatedUsd: Number(raw.estimatedUsd || 0),
+            model: raw.model ? String(raw.model) : undefined,
+            agent: raw.agent ? String(raw.agent) : undefined,
+            path: raw.path ? String(raw.path) : undefined,
+            runId: raw.runId ? String(raw.runId) : undefined,
+            calls: Number(raw.calls || 0),
+          });
+        }
         if ((type === "agent_thought" || type === "thought" || type === "token") && (p.delta || p.text)) {
           const tok = String(p.delta || p.text);
           useChat.getState().appendThought(String(p.agent || "agent"), tok, p.channel ? String(p.channel) : undefined);

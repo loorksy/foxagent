@@ -115,6 +115,20 @@ export type StrategyValidation = {
   detail?: string;
 };
 
+export type TokenUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens?: number;
+  cacheReadTokens?: number;
+  totalTokens: number;
+  estimatedUsd?: number;
+  model?: string;
+  agent?: string;
+  path?: string;
+  runId?: string;
+  calls?: number;
+};
+
 export type ChatMessage = {
   id: string;
   role: ChatRole;
@@ -124,6 +138,7 @@ export type ChatMessage = {
   streaming?: boolean;
   strategyProposal?: StrategyRule;
   strategyValidation?: StrategyValidation;
+  usage?: TokenUsage;
 };
 
 export type StructureFvg = {

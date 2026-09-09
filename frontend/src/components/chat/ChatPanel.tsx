@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import { AgentAvatar } from "./AgentAvatar";
 import { ChatComposer } from "./ChatComposer";
 import { ChatThinking } from "./ChatThinking";
+import { ChatUsageMeter } from "./ChatUsageMeter";
 import { RecommendationCard } from "./RecommendationCard";
 import { StrategyProposalCard } from "@/components/strategy-lab/StrategyProposalCard";
 import { ArtifactsWorkspace } from "./ArtifactsWorkspace";
@@ -19,6 +20,7 @@ export function ChatPanel() {
   const thoughts = useChat((s) => s.thoughts);
   const debate = useChat((s) => s.debate);
   const highlight = useChat((s) => s.highlight);
+  const runUsage = useChat((s) => s.runUsage);
   const recs = useRecommendations((s) => s.items);
   const persistActive = useSessions((s) => s.persistActive);
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -128,6 +130,10 @@ export function ChatPanel() {
                             <p className="whitespace-pre-wrap leading-relaxed">{m.text}</p>
                           )
                         ) : null}
+                        <ChatUsageMeter
+                          usage={m.streaming ? runUsage || m.usage : m.usage}
+                          live={Boolean(m.streaming && runUsage)}
+                        />
                       </div>
                     </div>
                   )}

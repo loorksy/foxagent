@@ -44,6 +44,7 @@ from app.services.sdk_runtime import (
 from app.services.simulator import normalize_granularity
 from app.services.risk_rules import RiskRejected
 from app.services.run_control import DebateBudget, RunCancelled, raise_if_cancelled
+from app.services.token_usage import record_model_usage
 from app.services.session_store import append_session_event
 from app.services.settings_store import load_runtime_settings
 from app.services.telegram_service import schedule_trade_alert
@@ -137,11 +138,16 @@ async def _stream_plain(
         raise AgentUnavailable(f"Claude API error: {_sanitize_error(exc, api_key)}") from exc
 
     parts: list[str] = []
+    last_usage: Any = None
     parser = ArtifactStreamParser(
         emit, session_id=session_id, agent=agent, run_id=run_id, user_message=user_message
     )
     async for event in stream:
-        if getattr(event, "type", "") != "content_block_delta":
+        et = getattr(event, "type", "")
+        if et in {"message_delta", "message_start"}:
+            last_usage = event
+            continue
+        if et != "content_block_delta":
             continue
         delta = event.delta
         text = ""
@@ -165,6 +171,7 @@ async def _stream_plain(
     await parser.ingest_complete(raw)
     if leftover:
         await emit("agent_thought", {"runId": run_id, "agent": agent, "delta": leftover, "text": leftover})
+    await record_model_usage(last_usage, emit=emit, run_id=run_id, model=model, agent=agent, path="messages")
     return strip_ant_artifacts(raw) or raw.strip()
 
 
@@ -206,10 +213,15 @@ async def _try_sdk_turn(
             async with ClaudeSDKClient(options=options) as client:
                 await client.query(sdk_query_arg(user, image_b64))
                 async for msg in client.receive_response():
-                    if type(msg).__name__ == "ResultMessage" and getattr(msg, "is_error", False):
-                        status = getattr(msg, "api_error_status", None)
-                        detail = getattr(msg, "result", None) or getattr(msg, "errors", None)
-                        raise RuntimeError(f"SDK ResultMessage error status={status} {detail}")
+                    if type(msg).__name__ == "ResultMessage":
+                        await record_model_usage(
+                            msg, emit=emit, run_id=run_id, model=model, agent=name, path="sdk"
+                        )
+                        if getattr(msg, "is_error", False):
+                            status = getattr(msg, "api_error_status", None)
+                            detail = getattr(msg, "result", None) or getattr(msg, "errors", None)
+                            raise RuntimeError(f"SDK ResultMessage error status={status} {detail}")
+                        continue
                     content = getattr(msg, "content", None)
                     if not isinstance(content, list):
                         continue
@@ -352,8 +364,11 @@ async def run_agent_turn(
 
         text_acc = ""
         tool_uses: list[dict[str, Any]] = []
+        last_usage: Any = None
         async for event in stream:
             et = getattr(event, "type", "")
+            if et in {"message_delta", "message_start"}:
+                last_usage = event
             if et == "content_block_start":
                 block = getattr(event, "content_block", None)
                 if block is not None and getattr(block, "type", None) == "tool_use":
@@ -432,6 +447,7 @@ async def run_agent_turn(
                         },
                     )
             stop_reason = msg.stop_reason
+            last_usage = msg
         else:
             stop_reason = "tool_use" if tool_uses else "end_turn"
             assistant_content = []
@@ -440,6 +456,9 @@ async def run_agent_turn(
             assistant_content.extend(
                 {"type": "tool_use", "id": t["id"], "name": t["name"], "input": t["input"]} for t in tool_uses
             )
+        await record_model_usage(
+            last_usage, emit=emit, run_id=run_id, model=model, agent=name, path="messages"
+        )
 
         parsed = extract_json_object(strip_ant_artifacts(text_acc) or text_acc)
         if parsed and "tradeSetup" in parsed:

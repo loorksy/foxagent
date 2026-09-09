@@ -11,6 +11,7 @@ import type {
   RunTool,
   StrategyRule,
   StrategyValidation,
+  TokenUsage,
 } from "@/lib/types";
 import { MODELS } from "@/lib/constants";
 import { uid } from "@/lib/utils";
@@ -30,6 +31,8 @@ type ChatState = {
   activeArtifactId: string | null;
   highlight: string | null;
   abort: AbortController | null;
+  runUsage: TokenUsage | null;
+  sessionUsage: TokenUsage | null;
   setModel: (model: string) => void;
   setHighlight: (highlight: string | null) => void;
   setArtifactsOpen: (open: boolean) => void;
@@ -50,10 +53,30 @@ type ChatState = {
   appendArtifact: (id: string, text: string) => void;
   endArtifact: (artifact: Artifact) => void;
   complete: () => void;
+  applyUsage: (usage: TokenUsage) => void;
   hydrateFromSession: (session: AgentSession) => void;
   loadMessages: (messages: ChatMessage[]) => void;
   clearChat: () => void;
 };
+
+function emptyUsage(): TokenUsage {
+  return { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, totalTokens: 0, estimatedUsd: 0, calls: 0 };
+}
+
+function addUsage(a: TokenUsage | null | undefined, b: TokenUsage | null | undefined): TokenUsage {
+  const left = a || emptyUsage();
+  const right = b || emptyUsage();
+  return {
+    inputTokens: (left.inputTokens || 0) + (right.inputTokens || 0),
+    outputTokens: (left.outputTokens || 0) + (right.outputTokens || 0),
+    cacheCreationTokens: (left.cacheCreationTokens || 0) + (right.cacheCreationTokens || 0),
+    cacheReadTokens: (left.cacheReadTokens || 0) + (right.cacheReadTokens || 0),
+    totalTokens: (left.totalTokens || 0) + (right.totalTokens || 0),
+    estimatedUsd: Number(((left.estimatedUsd || 0) + (right.estimatedUsd || 0)).toFixed(4)),
+    calls: (left.calls || 0) + (right.calls || 0),
+    model: right.model || left.model,
+  };
+}
 
 function asMessages(raw: unknown): ChatMessage[] {
   if (!Array.isArray(raw)) return [];
@@ -70,6 +93,7 @@ function asMessages(raw: unknown): ChatMessage[] {
         recommendationId: row.recommendationId,
         strategyProposal: row.strategyProposal,
         strategyValidation: row.strategyValidation,
+        usage: row.usage,
       } satisfies ChatMessage;
     })
     .filter((m) => m.text || m.recommendationId || m.strategyProposal);
@@ -90,6 +114,8 @@ export const useChat = create<ChatState>((set) => ({
   activeArtifactId: null,
   highlight: null,
   abort: null,
+  runUsage: null,
+  sessionUsage: null,
   setModel: (model) => set({ model }),
   setHighlight: (highlight) => set({ highlight }),
   setArtifactsOpen: (artifactsOpen) => set({ artifactsOpen }),
@@ -106,6 +132,7 @@ export const useChat = create<ChatState>((set) => ({
     set((s) => ({
       runId,
       streaming: true,
+      runUsage: null,
       thoughts: [],
       tools: [],
       debate: [],
@@ -198,15 +225,27 @@ export const useChat = create<ChatState>((set) => ({
       artifactsOpen: true,
       activeArtifactId: artifact.id,
     })),
+  applyUsage: (usage) =>
+    set((s) => {
+      const msgs = s.messages.map((m) =>
+        m.role === "assistant" && (m.streaming || m.id === s.messages.filter((x) => x.role === "assistant").at(-1)?.id)
+          ? { ...m, usage }
+          : m
+      );
+      return { runUsage: usage, messages: msgs };
+    }),
   complete: () =>
     set((s) => ({
       streaming: false,
+      sessionUsage: s.streaming ? addUsage(s.sessionUsage, s.runUsage) : s.sessionUsage,
       messages: s.messages.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
     })),
   hydrateFromSession: (session) => {
     const state = session.state || {};
+    const messages = asMessages(state.messages);
+    const sessionUsage = messages.reduce<TokenUsage | null>((acc, m) => (m.usage ? addUsage(acc, m.usage) : acc), null);
     set({
-      messages: asMessages(state.messages),
+      messages,
       thoughts: state.thoughts || [],
       tools: state.tools || [],
       debate: state.debate || [],
@@ -214,6 +253,8 @@ export const useChat = create<ChatState>((set) => ({
       recalls: state.recalls || [],
       streaming: false,
       runId: null,
+      runUsage: null,
+      sessionUsage,
       activeArtifactId: state.artifacts?.[0]?.id || null,
     });
   },
@@ -228,6 +269,8 @@ export const useChat = create<ChatState>((set) => ({
       artifacts: [],
       recalls: [],
       runId: null,
+      runUsage: null,
+      sessionUsage: null,
       activeArtifactId: null,
     }),
 }));
