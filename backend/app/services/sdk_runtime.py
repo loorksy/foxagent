@@ -36,6 +36,7 @@ SDK_TOOLS = [
     "mcp__oanda__propose_strategy",
     "mcp__oanda__validate_strategy",
     "mcp__oanda__list_strategies",
+    "mcp__oanda__experiment_strategy",
 ]
 
 

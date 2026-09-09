@@ -81,7 +81,7 @@ export type Instrument = {
 
 export type ChatRole = "user" | "assistant" | "system";
 
-export type StrategyStatus = "draft" | "validated" | "active" | "rejected" | "archived";
+export type StrategyStatus = "draft" | "validated" | "active" | "rejected" | "archived" | "experimenting";
 export type StrategySource = "builtin" | "claude_proposed" | "manual";
 
 export type StrategyRule = {
@@ -92,6 +92,9 @@ export type StrategyRule = {
   timeframe?: string[];
   direction: "buy" | "sell" | "both";
   entry_conditions: Record<string, unknown>;
+  sessions?: string[];
+  dsl?: Record<string, unknown>;
+  pinned?: boolean;
   stop_rule: string;
   tp1_r: number;
   tp2_r: number;
@@ -113,6 +116,31 @@ export type StrategyValidation = {
   strategy?: StrategyRule;
   report?: BacktestReport;
   detail?: string;
+};
+
+export type StrategyExperimentAttempt = {
+  n: number;
+  change: string;
+  passed: boolean;
+  reasons?: string[];
+  strategy?: StrategyRule;
+  report?: {
+    winRate?: number | null;
+    profitFactor?: number | null;
+    maxDrawdownR?: number | null;
+    totalTrades?: number | null;
+  };
+};
+
+export type StrategyExperimentJob = {
+  id: string;
+  strategyId: string;
+  status: string;
+  attempts: StrategyExperimentAttempt[];
+  maxAttempts: number;
+  createdAt?: string;
+  passed: boolean;
+  best?: StrategyExperimentAttempt | null;
 };
 
 export type TokenUsage = {
@@ -138,6 +166,7 @@ export type ChatMessage = {
   streaming?: boolean;
   strategyProposal?: StrategyRule;
   strategyValidation?: StrategyValidation;
+  strategyExperiment?: StrategyExperimentJob;
   usage?: TokenUsage;
 };
 
@@ -397,4 +426,66 @@ export type StrategyPerf = {
   averageWin?: number;
   averageLoss?: number;
   profitFactor?: number;
+};
+
+export type InboxTab = "inbox" | "approvals" | "alerts";
+
+export type InboxItem = {
+  id: string;
+  tab: InboxTab;
+  kind: "signal" | "recommendation" | "warehouse" | "news" | "bot";
+  title: string;
+  summary: string;
+  severity: "high" | "medium" | "low";
+  href: string;
+  sourceHref: string;
+  createdAt?: string | null;
+  payload?: {
+    signal?: BotSignal;
+    recommendation?: TradeRecommendation;
+    rejectionReason?: string;
+    event?: EconomicEvent;
+    minutes?: number;
+    timeframes?: string[];
+  };
+};
+
+export type InboxCounts = {
+  open: number;
+  inbox: number;
+  approvals: number;
+  alerts: number;
+};
+
+export type DeskStatus = {
+  paused: boolean;
+  botRunning: boolean;
+  botEnabled?: boolean;
+  warehouseStale: boolean;
+  nextEventTitle?: string | null;
+  nextEventMinutes?: number | null;
+  openCount: number;
+  lastError?: string;
+};
+
+export type InboxSnapshot = {
+  items: InboxItem[];
+  counts: InboxCounts;
+  desk: DeskStatus;
+};
+
+export type PreflightCheck = {
+  id: string;
+  ok: boolean;
+  blocking: boolean;
+  label: string;
+  detail: string;
+};
+
+export type PreflightReport = {
+  ok: boolean;
+  blocking: boolean;
+  paused?: boolean;
+  botRunning?: boolean;
+  checks: PreflightCheck[];
 };

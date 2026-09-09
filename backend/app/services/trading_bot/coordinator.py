@@ -100,6 +100,12 @@ class TradingBotCoordinator:
             except Exception as exc:
                 self.last_error = str(exc)[:240]
                 logger.error("Monitor loop error: %s", exc)
+                try:
+                    from app.services.trading_bot.circuit import note_scan_error
+
+                    await note_scan_error()
+                except Exception:
+                    pass
                 await asyncio.sleep(30)
 
     async def run_cycle(self, runtime: Any | None = None) -> list[dict[str, Any]]:
@@ -107,11 +113,21 @@ class TradingBotCoordinator:
         agents = set(getattr(runtime, "botAgents", None) or ["multi_strategy", "pattern_notes", "news_candle"])
         active = list(getattr(runtime, "botActiveStrategies", None) or [])
         saved: list[dict[str, Any]] = []
+        rejected = 0
+        from app.services.run_control import is_paused
+        from app.services.trading_bot.circuit import is_safe_mode
+
+        if await is_paused():
+            return await self._finish_cycle(agents, saved, rejected, "paused")
+        if await is_safe_mode():
+            return await self._finish_cycle(agents, saved, rejected, "safe mode")
         if "news_candle" in agents:
             for signal in await self.news_candle_agent.monitor_events():
                 kept = await self._accept(signal, runtime)
                 if kept:
                     saved.append(kept)
+                else:
+                    rejected += 1
         if "multi_strategy" in agents:
             from app.services.trading_bot.strategy_library import get_library
             from app.services.trading_bot.strategy_schema import BUILTIN_IDS
@@ -128,11 +144,21 @@ class TradingBotCoordinator:
                 kept = await self._accept(signal, runtime)
                 if kept:
                     saved.append(kept)
+                else:
+                    rejected += 1
         if "pattern_notes" in agents:
             for signal in await self.pattern_notes_agent.detect_patterns():
                 kept = await self._accept(signal, runtime)
                 if kept:
                     saved.append(kept)
+                else:
+                    rejected += 1
+        return await self._finish_cycle(agents, saved, rejected)
+
+    async def _finish_cycle(self, agents, saved, rejected, error: str = ""):
+        from app.services.trading_bot.scans import record_scan
+
+        await record_scan(agents=sorted(agents), accepted=saved, rejected=rejected, error=error)
         return saved
 
     async def _bot_limits(self, signal: dict[str, Any], runtime: Any) -> bool:
@@ -152,6 +178,11 @@ class TradingBotCoordinator:
 
     async def _accept(self, signal: dict[str, Any], runtime: Any | None = None) -> dict[str, Any] | None:
         runtime = runtime or await self._settings()
+        from app.services.run_control import is_paused
+        from app.services.trading_bot.circuit import is_halted, is_safe_mode
+
+        if await is_paused() or await is_safe_mode() or await is_halted(str(signal.get("strategyId") or "")):
+            return None
         rec = signal_to_recommendation(signal)
         try:
             await enforce_risk_gate(rec.model_dump(mode="json"))

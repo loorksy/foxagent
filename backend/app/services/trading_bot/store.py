@@ -159,6 +159,12 @@ async def apply_signal_outcome(signal: dict[str, Any]) -> None:
     status = str(signal.get("status") or "")
     if status not in {"won", "lost"}:
         return
+    try:
+        from app.services.trading_bot.circuit import note_outcome
+
+        await note_outcome(str(signal.get("strategyId") or ""), won=status == "won")
+    except Exception:
+        pass
     await bump_performance(
         strategy_id=str(signal.get("strategyId") or ""),
         agent_type=str(signal.get("agentType") or ""),

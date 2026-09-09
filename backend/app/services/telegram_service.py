@@ -380,6 +380,27 @@ async def send_bot_result(signal: dict[str, Any], pnl: float) -> dict[str, Any]:
         return {"ok": False, "detail": str(exc)[:200]}
 
 
+async def send_html(text: str, *, token: str, chat_ids: list[str]) -> dict[str, Any]:
+    results: list[dict[str, Any]] = []
+    async with httpx.AsyncClient() as client:
+        for chat_id in chat_ids:
+            try:
+                resp = await _post_with_retry(
+                    client,
+                    f"{TELEGRAM_API}/bot{token}/sendMessage",
+                    data={
+                        "chat_id": chat_id,
+                        "text": text,
+                        "parse_mode": "HTML",
+                        "disable_web_page_preview": False,
+                    },
+                )
+                results.append({"chat_id": chat_id, "ok": resp.status_code < 400})
+            except Exception as exc:
+                results.append({"chat_id": chat_id, "ok": False, "detail": str(exc)[:200]})
+    return {"ok": any(r.get("ok") for r in results), "results": results}
+
+
 async def send_daily_summary() -> dict[str, Any]:
     from app.services.trading_bot.store import list_performance, list_signals
 

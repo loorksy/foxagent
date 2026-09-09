@@ -17,6 +17,7 @@ type BacktestState = {
     minRr?: number;
   }) => Promise<void>;
   loadHistory: () => Promise<void>;
+  loadReport: (id: string) => Promise<void>;
 };
 
 export const useBacktest = create<BacktestState>((set) => ({
@@ -39,6 +40,14 @@ export const useBacktest = create<BacktestState>((set) => ({
       set({ history: data.reports || [] });
     } catch {
       set({ history: [] });
+    }
+  },
+  loadReport: async (id) => {
+    try {
+      const report = await api.backtestReport(id);
+      set({ report, error: "" });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "report failed" });
     }
   },
 }));

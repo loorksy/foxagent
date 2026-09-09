@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bot, Brain, CalendarDays, FileStack, FlaskConical, Library, LineChart, MessageSquareText, PanelLeft, PanelLeftClose, Settings, X } from "lucide-react";
+import { useEffect } from "react";
+import { Bot, Brain, CalendarDays, FileStack, FlaskConical, Inbox, Library, LineChart, ListTree, MessageSquareText, Newspaper, Notebook, PanelLeft, PanelLeftClose, Settings, X } from "lucide-react";
 import { FoxLogo } from "./FoxLogo";
 import { Conversations } from "./Conversations";
 import { useUi } from "@/stores/ui";
 import { useSessions } from "@/stores/sessions";
 import { useChat } from "@/stores/chat";
+import { useInbox } from "@/stores/inbox";
 import { cn } from "@/lib/utils";
 import { useT, type MessageKey } from "@/i18n";
 
@@ -19,7 +21,11 @@ const NAV: { href: string; match: string; labelKey: MessageKey; icon: typeof Mes
   { href: "/recommendations", match: "/recommendations", labelKey: "nav.recommendations", icon: LineChart },
   { href: "/memory", match: "/memory", labelKey: "nav.memory", icon: Brain },
   { href: "/calendar", match: "/calendar", labelKey: "nav.calendar", icon: CalendarDays },
-  { href: "/bot", match: "/bot", labelKey: "nav.bot", icon: Bot },
+  { href: "/inbox", match: "/inbox", labelKey: "nav.inbox", icon: Inbox },
+  { href: "/bots", match: "/bots", labelKey: "nav.bot", icon: Bot },
+  { href: "/scans", match: "/scans", labelKey: "nav.scans", icon: ListTree },
+  { href: "/briefing", match: "/briefing", labelKey: "nav.briefing", icon: Newspaper },
+  { href: "/journal", match: "/journal", labelKey: "nav.journal", icon: Notebook },
   { href: "/backtest", match: "/backtest", labelKey: "nav.backtest", icon: FlaskConical },
   { href: "/strategy-lab", match: "/strategy-lab", labelKey: "nav.strategyLab", icon: Library },
   { href: "/settings", match: "/settings", labelKey: "nav.settings", icon: Settings },
@@ -31,6 +37,7 @@ function NavList({ iconOnly, onNavigate }: { iconOnly: boolean; onNavigate?: () 
   const hasArtifacts = useChat((s) => s.artifacts.length > 0);
   const artifactsOpen = useChat((s) => s.artifactsOpen);
   const t = useT();
+  const inboxOpen = useInbox((s) => s.counts.open);
   return (
     <nav className="flex shrink-0 flex-col gap-0.5 px-2 py-2" aria-label={t("nav.aria")}>
       {NAV.map((item) => {
@@ -46,6 +53,7 @@ function NavList({ iconOnly, onNavigate }: { iconOnly: boolean; onNavigate?: () 
             title={iconOnly ? label : undefined}
             className={cn(
               "relative flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors lg:min-h-10",
+              item.href === "/inbox" && !iconOnly && "pe-2",
               FOCUS,
               iconOnly && "justify-center px-0",
               active ? "bg-[var(--sidebar-active-bg)] text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -54,6 +62,11 @@ function NavList({ iconOnly, onNavigate }: { iconOnly: boolean; onNavigate?: () 
             {active && <span className="absolute inset-y-2 start-0 w-0.5 rounded-full bg-foreground" />}
             <Icon className={cn("shrink-0", iconOnly ? "h-5 w-5" : "h-4 w-4")} />
             {!iconOnly && <span className="truncate">{label}</span>}
+            {item.href === "/inbox" && inboxOpen > 0 ? (
+              <span className={cn("ms-auto rounded-full bg-foreground px-1.5 text-[10px] font-semibold leading-5 text-background", iconOnly && "absolute end-0.5 top-1 ms-0")}>
+                {inboxOpen > 9 ? "9+" : inboxOpen}
+              </span>
+            ) : null}
           </Link>
         );
       })}
@@ -87,6 +100,12 @@ export function Sidebar() {
   const setMobileOpen = useUi((s) => s.setMobileOpen);
   const activeId = useSessions((s) => s.activeId);
   const t = useT();
+
+  useEffect(() => {
+    void useInbox.getState().load();
+    const id = window.setInterval(() => void useInbox.getState().load(), 20000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const header = (
     <div className={cn("flex h-14 shrink-0 items-center border-b border-sidebar-border px-3", collapsed ? "justify-center" : "justify-between gap-2")}>

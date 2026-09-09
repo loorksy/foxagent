@@ -15,6 +15,7 @@ export function StrategyProposalCard({
 }) {
   const t = useT();
   const validate = useStrategyLab((s) => s.validate);
+  const approve = useStrategyLab((s) => s.approve);
   const reject = useStrategyLab((s) => s.reject);
   const last = useStrategyLab((s) => s.lastValidation);
   const [busy, setBusy] = useState(false);
@@ -38,13 +39,22 @@ export function StrategyProposalCard({
             className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
             onClick={async () => {
               setBusy(true);
-              const result = await validate(rule.id, true);
-              if (result?.passed) await useStrategyLab.getState().approve(rule.id);
+              await validate(rule.id);
               setBusy(false);
             }}
           >
             {t("lab.validate")}
           </button>
+          {rule.status === "validated" ? (
+            <button
+              type="button"
+              disabled={busy}
+              className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+              onClick={() => void approve(rule.id)}
+            >
+              {t("lab.pin")}
+            </button>
+          ) : null}
           <button
             type="button"
             disabled={busy}

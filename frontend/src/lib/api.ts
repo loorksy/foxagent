@@ -95,8 +95,31 @@ export const api = {
     ),
   economicCalendarUpcoming: () =>
     http<{ events: import("./types").EconomicEvent[]; source: string }>(`/api/economic-calendar/upcoming`),
+  inbox: (tab?: string) =>
+    http<import("./types").InboxSnapshot>(tab ? `/api/inbox?tab=${encodeURIComponent(tab)}` : "/api/inbox"),
+  inboxSummary: () =>
+    http<{ openCount: number; counts: import("./types").InboxCounts; desk: import("./types").DeskStatus }>(
+      "/api/inbox/summary"
+    ),
+  inboxItem: (id: string) => http<import("./types").InboxItem>(`/api/inbox/${encodeURIComponent(id)}`),
+  ackInbox: (id: string) => http<{ ok: boolean }>(`/api/inbox/${encodeURIComponent(id)}/ack`, { method: "POST" }),
+  approveInbox: (id: string) =>
+    http<{ ok: boolean; recommendation?: import("./types").TradeRecommendation }>(
+      `/api/approvals/${encodeURIComponent(id)}/approve`,
+      { method: "POST" }
+    ),
+  rejectInbox: (id: string, reason: string) =>
+    http<{ ok: boolean; signal?: import("./types").BotSignal }>(`/api/approvals/${encodeURIComponent(id)}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+  botPreflight: () => http<import("./types").PreflightReport>("/api/bot/preflight"),
   botStatus: () => http<import("./types").BotStatus>("/api/bot/status"),
-  botStart: () => http<import("./types").BotStatus>("/api/bot/start", { method: "POST" }),
+  botStart: (force = false) =>
+    http<import("./types").BotStatus & { preflight?: import("./types").PreflightReport }>(
+      force ? "/api/bot/start?force=true" : "/api/bot/start",
+      { method: "POST" }
+    ),
   botStop: () => http<import("./types").BotStatus>("/api/bot/stop", { method: "POST" }),
   botSignals: () => http<{ signals: import("./types").BotSignal[] }>("/api/bot/signals"),
   botSignal: (id: string) => http<import("./types").BotSignal>(`/api/bot/signals/${id}`),
@@ -153,6 +176,27 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ reason }),
     }),
+  pinStrategy: (id: string) => http<{ ok: boolean; strategy?: import("./types").StrategyRule }>(`/api/strategies/${id}/pin`, { method: "POST" }),
+  unpinStrategy: (id: string) =>
+    http<{ ok: boolean; strategy?: import("./types").StrategyRule }>(`/api/strategies/${id}/unpin`, { method: "POST" }),
+  botsRoom: () => http<Record<string, unknown>>("/api/bots"),
+  botsNews: () => http<{ open: boolean; windows: Array<Record<string, unknown>> }>("/api/bots/news"),
+  botScans: () => http<{ scans: Array<Record<string, unknown>> }>("/api/bot/scans"),
+  botScan: (id: string) => http<Record<string, unknown>>(`/api/bot/scans/${id}`),
+  haltStrategy: (id: string, reason = "") =>
+    http<{ ok: boolean }>(`/api/bot/strategies/${id}/halt`, { method: "POST", body: JSON.stringify({ reason }) }),
+  labLeaderboard: () => http<{ leaderboard: Array<Record<string, unknown>> }>("/api/lab/leaderboard"),
+  labJobs: () => http<{ jobs: Array<Record<string, unknown>> }>("/api/lab/jobs"),
+  labJob: (id: string) => http<Record<string, unknown>>(`/api/lab/jobs/${id}`),
+  startExperiment: (body: Record<string, unknown>) =>
+    http<{ ok: boolean; job?: Record<string, unknown> }>("/api/lab/experiments", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  briefing: () => http<Record<string, unknown>>("/api/briefing"),
+  journal: () => http<{ entries: Array<Record<string, unknown>> }>("/api/journal"),
+  postmortem: (id: string, body: Record<string, unknown>) =>
+    http<{ ok: boolean }>(`/api/recommendations/${id}/postmortem`, { method: "PATCH", body: JSON.stringify(body) }),
   streamChat: async (
     body: { message: string; symbol: string; timeframe: string; model: string; sessionId?: string },
     onEvent: (event: { type: string; payload: Record<string, unknown> }) => void,

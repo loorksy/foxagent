@@ -12,14 +12,21 @@ from sqlalchemy import select
 from app.db import SessionLocal
 from app.schemas import new_id
 from app.services.trading_bot.models import StrategyRecord
+from app.db import kv_get, kv_set
 from app.services.trading_bot.strategy_schema import (
     BUILTIN_IDS,
+    SESSIONS,
     StrategyRule,
     builtin_rules,
+    dsl_from_flags,
     evaluate_thresholds,
+    flags_from_dsl,
+    sanitize_sessions,
     sanitize_timeframes,
     utcnow,
 )
+
+PIN_KEY = "strategy_pins"
 
 logger = logging.getLogger(__name__)
 
@@ -160,21 +167,54 @@ class StrategyLibrary:
             logger.warning("Strategy persist deferred to memory: %s", exc)
         return rule
 
-    async def get_all(self, *, hydrate: bool = True) -> list[StrategyRule]:
-        merged = self._merge(await self._load_stored(hydrate=hydrate))
-        return sorted(merged.values(), key=lambda r: (0 if r.source == "builtin" else 1, r.name))
+    async def _pins(self) -> dict[str, bool]:
+        raw = await kv_get(PIN_KEY)
+        if not raw:
+            return {sid: True for sid in BUILTIN_IDS}
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            data = {}
+        out = {sid: True for sid in BUILTIN_IDS}
+        if isinstance(data, dict):
+            for key, value in data.items():
+                out[str(key)] = bool(value)
+        return out
+
+    async def _save_pins(self, pins: dict[str, bool]) -> None:
+        await kv_set(PIN_KEY, json.dumps(pins))
+
+    async def _decorate(self, rule: StrategyRule) -> StrategyRule:
+        pins = await self._pins()
+        data = rule.model_dump()
+        if rule.source == "builtin":
+            data["pinned"] = pins.get(rule.id, True)
+            data["status"] = "active" if data["pinned"] else "archived"
+        if not data.get("sessions"):
+            data["sessions"] = list(SESSIONS)
+        if not data.get("dsl"):
+            data["dsl"] = dsl_from_flags(data.get("entry_conditions") or {}, data.get("sessions"))
+        elif not data.get("entry_conditions"):
+            data["entry_conditions"] = flags_from_dsl(data.get("dsl"))
+        return StrategyRule.model_validate(data)
 
     async def get(self, strategy_id: str) -> StrategyRule | None:
         if strategy_id in self._builtins:
-            return self._builtins[strategy_id]
+            return await self._decorate(self._builtins[strategy_id])
         merged = self._merge(await self._load_stored())
-        return merged.get(strategy_id)
+        rule = merged.get(strategy_id)
+        return await self._decorate(rule) if rule else None
+
+    async def get_all(self, *, hydrate: bool = True) -> list[StrategyRule]:
+        merged = self._merge(await self._load_stored(hydrate=hydrate))
+        rows = [await self._decorate(r) for r in merged.values()]
+        return sorted(rows, key=lambda r: (0 if r.source == "builtin" else 1, r.name))
 
     async def get_active_strategies(self) -> list[StrategyRule]:
-        return [r for r in await self.get_all(hydrate=False) if r.status == "active"]
+        return [r for r in await self.get_all(hydrate=False) if r.pinned and r.status == "active"]
 
     async def list_runnable(self, timeframe: str | None = None) -> list[StrategyRule]:
-        rows = [r for r in await self.get_all() if r.status == "active"]
+        rows = [r for r in await self.get_all() if r.pinned and r.status == "active"]
         if timeframe:
             rows = [r for r in rows if timeframe in r.timeframes]
         return rows
@@ -193,13 +233,18 @@ class StrategyLibrary:
         if any(r.name.lower() == name.lower() and r.status != "archived" for r in existing):
             return {"ok": False, "detail": "Duplicate strategy name"}
         tfs = sanitize_timeframes(payload.get("timeframes") or payload.get("timeframe"))
+        sessions = sanitize_sessions(payload.get("sessions"))
+        conds = dict(payload.get("entry_conditions") or flags_from_dsl(payload.get("dsl")))
         rule = StrategyRule(
             id=sid,
             name=name,
             description=str(payload.get("description") or ""),
             timeframes=tfs,
             direction=payload.get("direction") or "both",  # type: ignore[arg-type]
-            entry_conditions=dict(payload.get("entry_conditions") or {}),
+            entry_conditions=conds,
+            sessions=sessions,
+            dsl=payload.get("dsl") or dsl_from_flags(conds, sessions),
+            pinned=False,
             stop_rule=str(payload.get("stop_rule") or "swing ± ATR"),
             tp1_r=float(payload.get("tp1_r") or 1.5),
             tp2_r=float(payload.get("tp2_r") or 3.0),
@@ -219,6 +264,7 @@ class StrategyLibrary:
         auto_activate: bool = False,
         engine_run=None,
     ) -> dict[str, Any]:
+        # Human pin only — auto_activate is ignored (ship 2).
         from app.services.run_control import is_paused
 
         if await is_paused():
@@ -248,8 +294,10 @@ class StrategyLibrary:
         rule.validation_report_id = report.id or None
         rule.validated_at = utcnow()
         if passed:
-            rule.status = "active" if auto_activate else "validated"
+            rule.status = "validated"
+            rule.pinned = False
             rule.rejection_reason = None
+            _ = auto_activate
         else:
             rule.status = "rejected"
             rule.rejection_reason = "; ".join(reasons)
@@ -268,9 +316,13 @@ class StrategyLibrary:
             return {"ok": False, "detail": "Strategy not found"}
         if rule.source == "builtin":
             return {"ok": True, "strategy": _public(rule)}
-        if rule.status not in {"validated", "active"}:
+        if rule.source != "builtin" and rule.status not in {"validated", "active"}:
             return {"ok": False, "detail": "Strategy must pass validation before approval"}
         rule.status = "active"
+        rule.pinned = True
+        pins = await self._pins()
+        pins[rule.id] = True
+        await self._save_pins(pins)
         await self._persist(rule)
         return {"ok": True, "strategy": _public(rule)}
 
@@ -302,12 +354,16 @@ class StrategyLibrary:
             return {"ok": False, "detail": "Strategy not found"}
         if rule.source == "builtin":
             return {"ok": False, "detail": "Cannot edit a builtin strategy"}
-        if rule.status != "draft":
+        if rule.status not in {"draft", "experimenting"}:
             return {"ok": False, "detail": "Only drafts can be edited"}
         data = rule.model_dump()
-        for key in ("name", "description", "direction", "stop_rule", "tp1_r", "tp2_r", "max_holding_bars", "entry_conditions"):
+        for key in ("name", "description", "direction", "stop_rule", "tp1_r", "tp2_r", "max_holding_bars", "entry_conditions", "sessions", "dsl"):
             if key in payload:
                 data[key] = payload[key]
+        if "sessions" in payload:
+            data["sessions"] = sanitize_sessions(payload.get("sessions"))
+        if "entry_conditions" in payload and "dsl" not in payload:
+            data["dsl"] = dsl_from_flags(data.get("entry_conditions") or {}, data.get("sessions"))
         if payload.get("timeframes") or payload.get("timeframe"):
             data["timeframes"] = sanitize_timeframes(payload.get("timeframes") or payload.get("timeframe"))
         updated = StrategyRule.model_validate(data)
@@ -330,6 +386,23 @@ class StrategyLibrary:
                     await session.delete(row)
                     await session.commit()
         return {"ok": True, "deleted": strategy_id}
+
+    async def pin(self, strategy_id: str, pinned: bool) -> dict[str, Any]:
+        rule = await self.get(strategy_id)
+        if rule is None:
+            return {"ok": False, "detail": "Strategy not found"}
+        if rule.source != "builtin" and rule.status not in {"validated", "active", "archived"}:
+            return {"ok": False, "detail": "Pin only after validation"}
+        pins = await self._pins()
+        pins[strategy_id] = pinned
+        await self._save_pins(pins)
+        if rule.source != "builtin":
+            rule.pinned = pinned
+            if pinned:
+                rule.status = "active"
+            await self._persist(rule)
+        decorated = await self.get(strategy_id)
+        return {"ok": True, "strategy": _public(decorated) if decorated else _public(rule)}
 
 
 def get_library() -> StrategyLibrary:

@@ -47,6 +47,7 @@ class Hub:
 
 
 market_hub = Hub()
+bot_hub = Hub()
 
 
 async def emit_agent(event: str, payload: dict[str, Any]) -> None:
@@ -107,6 +108,20 @@ async def _accept_authenticated(ws: WebSocket) -> bool:
         return False
     await ws.accept()
     return True
+
+
+@router.websocket("/ws/bot")
+async def bot_ws(ws: WebSocket) -> None:
+    if not await _accept_authenticated(ws):
+        return
+    await bot_hub.add(ws)
+    try:
+        while True:
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await bot_hub.remove(ws)
 
 
 @router.websocket("/ws/market")

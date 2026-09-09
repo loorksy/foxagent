@@ -2,7 +2,7 @@
 
 | الحقل | القيمة |
 | --- | --- |
-| الحالة | معتمدة للنقاش — التنفيذ سفينةً سفينة |
+| الحالة | قيد التنفيذ على PR غرفة العمليات — السفن 1–10 في نفس الفرع |
 | الواجهة الحية | `https://foxagent.lork.cloud` |
 | المصدر | دمج قائمتي التطوير المتفق عليهما (غرفة العمليات + عقد الاستراتيجية) |
 | التاريخ | سبتمبر 2026 |
@@ -34,20 +34,20 @@
 
 | الموجود | الواقع |
 | --- | --- |
-| المسارات | `/` `/agents` `/agents/:id` `/recommendations` `/memory` `/calendar` `/bot` `/backtest` `/strategy-lab` `/settings` |
-| البوت | منسّق واحد في `TradingBotCoordinator` فيه ثلاثة وكلاء داخليون: هيكل (`MultiStrategyAgent`) · أنماط (`PatternNotesAgent`) · شمعة خبر (`NewsCandleAgent`). صفحة واحدة `/bot` |
-| الاستراتيجيات | عقد `StrategyRule` بأعلام (`asian_sweep`, `fvg_exists`…) عبر `StrategyForm`. الخمس المدمجة (`BUILTIN_IDS`) غير قابلة للحذف ودائماً `active` |
-| التحقق | `POST /api/strategies/:id/validate` + أداة MCP `validate_strategy` تستدعي `auto_activate=True` فتصير الاستراتيجية حيّة بلا تثبيت بشري |
-| الحالات | `draft / validated / active / rejected / archived` — لا `pinned` ولا `experimenting` |
-| الجلسات | إعدادات `london / ny / asian`؛ كثير من القواعد مربوطة بنطاق آسيا كقيد لا كمستوى سيولة |
-| الإشارات | `GET/PATCH /api/bot/signals` و`POST .../to-recommendation` (ثقة > 0.8). لا طابور stage/commit، لا رفض بسبب محفوظ ككيان وارد |
-| المسح | عدّاد `cycles` في المنسّق. لا دفتر دورة، لا `scanId`، لا خط زمني |
-| الباك تست | محرّك حتمي على المستودع. `GET /api/backtest/reports` موجود. الواجهة تشغّل تقريراً جديداً فقط — لا قائمة محفوظة ظاهرة، رغم أن النوع فيه `bySession` / `byMonth` |
-| التقويم | Forex Factory + `WATCHLIST` قصيرة (NFP, CPI, FOMC, GDP, payroll, PMI/ISM, PPI, PCE, Powell…). وكيل الخبر موجود ككود لا كمكتب |
-| تيليجرام | تنبيه توصية + لقطة شارت. لا إحاطة مجدولة، لا أوامر واردة، لا تنبيه stale/خبر |
-| الحوكمة | Pause عام. لا قاطع لكل استراتيجية، لا safe mode، لا سقف إشارة/ساعة |
-| الشات | طاقم ثابت + حلقة أدوات. عداد توكن إن دُمج من فرعه. بطاقة مقترح استراتيجية موجودة؛ لا حلقة تجربة ≤8 ولا `/strategy-lab/jobs/:id` |
-| المستودع | M15 / H1 / H4 / D — نافذة سنتين. لا M1 حول الخبر بعد |
+| المسارات | `/` `/agents` `/agents/:id` `/recommendations` `/memory` `/calendar` `/inbox` `/bots` `/bots/structure` `/bots/patterns` `/bots/news` `/scans` `/briefing` `/journal` `/backtest` `/strategy-lab` `/strategy-lab/jobs/:id` `/settings` — `/bot` تحويل إلى `/bots` |
+| البوت | منسّق واحد بثلاثة وكلاء. غرفة `/bots` + مكاتب الهيكل/الأنماط/الخبر. Pause يوقف الجميع. لا أوامر وساطة |
+| الاستراتيجيات | عقد `StrategyRule` بأعلام + `dsl` + `sessions[]`. الخمس المدمجة قوالب `pinned` قابلة لفك التثبيت، لا تُحذف |
+| التحقق | `validate` يصل إلى `validated` فقط. `auto_activate` يُتجاهل. التثبيت بشري عبر `approve` / `pin` |
+| الحالات | `draft / experimenting / validated / active / rejected / archived` + حقل `pinned` |
+| الجلسات | `asia / london / ny / london_ny_overlap / london_close` على كل قاعدة |
+| الإشارات | وارد `/inbox`: staged → اعتماد عبر البوابة أو رفض بسبب محفوظ |
+| المسح | دفتر دورة `scanId` + `/scans` + `/ws/bot` + قاطع لكل استراتيجية + safe mode. Pause يغلب القواطع |
+| الباك تست | قائمة التقارير + `bySession` / `byMonth` + `/api/lab/leaderboard` |
+| التقويم | Forex Factory + `WATCHLIST` أوسع. بوت الخبر يعرض نافذة حقيقية أو حالة فارغة صريحة |
+| تيليجرام | إحاطة قبل لندن + تنبيه stale/خبر + أوامر `/status` `/pause` `/resume` `/inbox` من الشات المسموح فقط |
+| الحوكمة | Pause عام + قاطع لكل استراتيجية + safe mode بعد 5 إخفاقات مسح + حد معدّل 180/دقيقة |
+| الشات | بطاقة مقترح + بطاقة تجربة ≤8. لا تثبيت صامت |
+| المستودع | M15 / H1 / H4 / D — نافذة سنتين. لا M1 حول الخبر بعد. نسخة احتياطية: `scripts/backup_foxagent.sh` |
 
 **ما لن نعيد بناءه:** الشارت (klinecharts + overlays)، الطاقم، البوابة، Pause، المستودع، محرّك الباك تست، مسار الترقية الحالي. الجديد يستدعيها.
 
@@ -549,4 +549,4 @@
 
 لا يبدأ من السماح للوكيل بكتابة كود حر، ولا من تنفيذ أوامر، ولا من إعادة كتابة المكتب فوق منصة أخرى.
 
-بعد إغلاق السفينة 1 تُفتح السفينة 2 في فرع جديد من `main` الحي.
+السفن 1–10 نُفِّذت على نفس فرع غرفة العمليات (`cursor/inbox-ops-room-5f84`). لا فرع جديد لكل سفينة بعد هذا القرار.

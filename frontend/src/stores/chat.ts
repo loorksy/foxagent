@@ -9,6 +9,7 @@ import type {
   MemoryRecall,
   RunThought,
   RunTool,
+  StrategyExperimentJob,
   StrategyRule,
   StrategyValidation,
   TokenUsage,
@@ -43,6 +44,7 @@ type ChatState = {
   appendAssistant: (text: string, recommendationId?: string) => void;
   attachStrategyProposal: (proposal: StrategyRule) => void;
   attachStrategyValidation: (validation: StrategyValidation) => void;
+  attachStrategyExperiment: (job: StrategyExperimentJob) => void;
   appendToken: (text: string) => void;
   appendThought: (agent: string, text: string, channel?: string) => void;
   upsertToolCall: (tool: RunTool) => void;
@@ -93,10 +95,11 @@ function asMessages(raw: unknown): ChatMessage[] {
         recommendationId: row.recommendationId,
         strategyProposal: row.strategyProposal,
         strategyValidation: row.strategyValidation,
+        strategyExperiment: row.strategyExperiment,
         usage: row.usage,
       } satisfies ChatMessage;
     })
-    .filter((m) => m.text || m.recommendationId || m.strategyProposal);
+    .filter((m) => m.text || m.recommendationId || m.strategyProposal || m.strategyExperiment);
 }
 
 export const useChat = create<ChatState>((set) => ({
@@ -174,6 +177,17 @@ export const useChat = create<ChatState>((set) => ({
       const last = [...msgs].reverse().find((m) => m.role === "assistant");
       if (!last) return s;
       return { messages: msgs.map((m) => (m.id === last.id ? { ...m, strategyValidation: validation } : m)) };
+    }),
+  attachStrategyExperiment: (job) =>
+    set((s) => {
+      const msgs = [...s.messages];
+      const last = [...msgs].reverse().find((m) => m.role === "assistant");
+      if (!last) {
+        return {
+          messages: [...msgs, { id: uid("ast"), role: "assistant", text: "", createdAt: Date.now(), strategyExperiment: job }],
+        };
+      }
+      return { messages: msgs.map((m) => (m.id === last.id ? { ...m, strategyExperiment: job } : m)) };
     }),
   appendToken: (text) =>
     set((s) => {

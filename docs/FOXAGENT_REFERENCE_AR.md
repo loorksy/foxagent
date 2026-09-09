@@ -1171,7 +1171,7 @@ Caddy:
 
 **[docs/DEVELOPMENT_PLAN_AR.md](DEVELOPMENT_PLAN_AR.md)**
 
-عشر سفن، كل واحدة اختبار ثم نشر على `foxagent.lork.cloud`:
+عشر سفن على نفس PR غرفة العمليات (`cursor/inbox-ops-room-5f84`) ثم نشر على `foxagent.lork.cloud`:
 
 1. `/inbox` + اعتماد الإشارة + Preflight + شارة الشريط
 2. إلغاء `auto_activate` + تثبيت بشري + حقل الجلسات

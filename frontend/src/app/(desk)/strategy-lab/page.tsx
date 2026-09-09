@@ -1,10 +1,15 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { StrategyForm } from "@/components/strategy-lab/StrategyForm";
 import { StrategyLibrary } from "@/components/strategy-lab/StrategyLibrary";
 import { ValidationResult } from "@/components/strategy-lab/ValidationResult";
+import { LeaderboardTable } from "@/components/strategy-lab/LeaderboardTable";
+import { StrategyJobCard } from "@/components/strategy-lab/StrategyJobCard";
 import { useStrategyLab } from "@/stores/strategyLab";
+import { api } from "@/lib/api";
+import type { StrategyExperimentJob } from "@/lib/types";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +18,8 @@ const TABS = [
   { id: "create" as const, key: "lab.tab.create" as const },
   { id: "proposed" as const, key: "lab.tab.proposed" as const },
   { id: "results" as const, key: "lab.tab.results" as const },
+  { id: "jobs" as const, key: "lab.tab.jobs" as const },
+  { id: "leaderboard" as const, key: "lab.tab.leaderboard" as const },
 ];
 
 export default function StrategyLabRoute() {
@@ -24,10 +31,28 @@ export default function StrategyLabRoute() {
   const error = useStrategyLab((s) => s.error);
   const lastValidation = useStrategyLab((s) => s.lastValidation);
   const history = useStrategyLab((s) => s.history);
+  const [jobs, setJobs] = useState<StrategyExperimentJob[]>([]);
+  const [board, setBoard] = useState<Array<Record<string, unknown>>>([]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (tab !== "jobs") return;
+    void api
+      .labJobs()
+      .then((data) => setJobs((data.jobs as StrategyExperimentJob[]) || []))
+      .catch(() => setJobs([]));
+  }, [tab]);
+
+  useEffect(() => {
+    if (tab !== "leaderboard") return;
+    void api
+      .labLeaderboard()
+      .then((data) => setBoard(data.leaderboard || []))
+      .catch(() => setBoard([]));
+  }, [tab]);
 
   const proposed = items.filter((r) => r.status === "draft" && r.source !== "builtin");
   const validated = items.filter((r) => r.validation_report_id || r.status === "validated" || r.status === "rejected");
@@ -65,6 +90,34 @@ export default function StrategyLabRoute() {
           ))}
           {!lastValidation && !validated.length ? <p className="text-sm text-muted-foreground">{t("lab.empty")}</p> : null}
         </div>
+      ) : null}
+      {tab === "jobs" ? (
+        <div className="space-y-3">
+          {jobs.length === 0 ? <p className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">{t("lab.jobsEmpty")}</p> : null}
+          {jobs.map((job) => (
+            <div key={job.id}>
+              <StrategyJobCard job={job} />
+              <Link href={`/strategy-lab/jobs/${job.id}`} className="mt-1 inline-block text-xs text-muted-foreground">
+                {job.id}
+              </Link>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {tab === "leaderboard" ? (
+        <LeaderboardTable
+          rows={board.map((row) => ({
+            id: String(row.id || ""),
+            name: String(row.name || row.id || ""),
+            status: String(row.status || "draft"),
+            pinned: Boolean(row.pinned),
+            winRate: typeof row.winRate === "number" ? row.winRate : null,
+            profitFactor: typeof row.profitFactor === "number" ? row.profitFactor : null,
+            maxDrawdownR: typeof row.maxDrawdownR === "number" ? row.maxDrawdownR : null,
+            totalTrades: typeof row.totalTrades === "number" ? row.totalTrades : null,
+            validatedAt: row.validatedAt ? String(row.validatedAt) : null,
+          }))}
+        />
       ) : null}
     </div>
   );
