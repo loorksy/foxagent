@@ -4,7 +4,8 @@ import { useBacktest } from "@/stores/backtest";
 import { useT } from "@/i18n";
 
 export function StrategyComparison() {
-  const byStrategy = useBacktest((s) => s.report?.byStrategy || {});
+  const report = useBacktest((s) => s.report);
+  const byStrategy = report?.byStrategy ?? {};
   const t = useT();
   const rows = Object.entries(byStrategy);
   if (!rows.length) return null;
