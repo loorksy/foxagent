@@ -136,11 +136,21 @@ async def tool_propose_strategy(payload: dict[str, Any] | None = None, emit: Emi
     return result
 
 
+async def tool_experiment_strategy(payload: dict[str, Any] | None = None, emit: Emit | None = None) -> dict[str, Any]:
+    from app.services.trading_bot.experiment import start_experiment
+
+    result = await start_experiment(dict(payload or {}))
+    sink = emit or _current_emit.get()
+    if sink:
+        await sink("strategy_experiment", result.get("job") or {})
+    return result
+
+
 async def tool_validate_strategy(strategy_id: str, emit: Emit | None = None) -> dict[str, Any]:
     """تشغيل باك تست على استراتيجية مقترحة واعتمادها إن تجاوزت الحدود."""
     from app.services.trading_bot.strategy_library import get_library
 
-    result = await get_library().validate(strategy_id, days=730, auto_activate=True)
+    result = await get_library().validate(strategy_id, days=730, auto_activate=False)
     sink = emit or _current_emit.get()
     if sink:
         await sink("strategy_validation", {k: result.get(k) for k in ("ok", "passed", "reasons", "strategy")})
@@ -346,6 +356,8 @@ def mcp_tool_specs() -> list[dict[str, Any]]:
                     "timeframes": {"type": "array", "items": {"type": "string"}},
                     "direction": {"type": "string", "enum": ["buy", "sell", "both"]},
                     "entry_conditions": {"type": "object"},
+                    "sessions": {"type": "array", "items": {"type": "string"}},
+                    "dsl": {"type": "object"},
                     "stop_rule": {"type": "string"},
                     "tp1_r": {"type": "number"},
                     "tp2_r": {"type": "number"},
@@ -356,11 +368,32 @@ def mcp_tool_specs() -> list[dict[str, Any]]:
         },
         {
             "name": "validate_strategy",
-            "description": "Run the warehouse backtest on a drafted gold strategy and activate it if thresholds pass.",
+            "description": "Run the warehouse backtest on a drafted gold strategy. Never pins it — the operator must approve.",
             "input_schema": {
                 "type": "object",
                 "properties": {"strategy_id": {"type": "string"}},
                 "required": ["strategy_id"],
+            },
+        },
+        {
+            "name": "experiment_strategy",
+            "description": "Propose a gold strategy draft and run up to 8 warehouse backtests. Never pins. Operator must approve.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "description": {"type": "string"},
+                    "timeframes": {"type": "array", "items": {"type": "string"}},
+                    "direction": {"type": "string", "enum": ["buy", "sell", "both"]},
+                    "entry_conditions": {"type": "object"},
+                    "sessions": {"type": "array", "items": {"type": "string"}},
+                    "dsl": {"type": "object"},
+                    "stop_rule": {"type": "string"},
+                    "tp1_r": {"type": "number"},
+                    "tp2_r": {"type": "number"},
+                    "max_holding_bars": {"type": "integer"},
+                    "days": {"type": "integer"},
+                },
             },
         },
         {
@@ -451,6 +484,8 @@ async def dispatch_tool(name: str, args: dict[str, Any], emit: Emit | None = Non
         )
     if name == "list_strategies":
         return await tool_list_strategies(str(args.get("status") or "active"))
+    if name == "experiment_strategy":
+        return await tool_experiment_strategy(args, emit)
     raise ValueError(f"Unknown tool: {name}")
 
 
@@ -610,6 +645,28 @@ def try_build_sdk_server():
         data = await tool_list_strategies(str(args.get("status") or "active"))
         return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
 
+    @tool(
+        "experiment_strategy",
+        "Draft a gold strategy and run up to 8 warehouse backtests. Never pins.",
+        {
+            "name": str,
+            "description": str,
+            "timeframes": list,
+            "direction": str,
+            "entry_conditions": dict,
+            "sessions": list,
+            "dsl": dict,
+            "stop_rule": str,
+            "tp1_r": float,
+            "tp2_r": float,
+            "max_holding_bars": int,
+            "days": int,
+        },
+    )
+    async def experiment_strategy(args: dict[str, Any]) -> dict[str, Any]:
+        data = await tool_experiment_strategy(args)
+        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
+
     return create_sdk_mcp_server(
         name="oanda",
         version="1.0.0",
@@ -631,5 +688,6 @@ def try_build_sdk_server():
             propose_strategy,
             validate_strategy,
             list_strategies,
+            experiment_strategy,
         ],
     )

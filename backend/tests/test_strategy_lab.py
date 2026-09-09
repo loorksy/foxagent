@@ -148,6 +148,7 @@ async def test_bot_reads_active_library_only():
         return _pass_report()
 
     await lib.validate(sid, engine_run=engine_run, auto_activate=True)
+    await lib.approve(sid)
     agent = MultiStrategyAgent(active=None)
     rules = await agent._rules()
     assert sid in {r.id for r in rules}
@@ -187,7 +188,7 @@ async def test_pause_blocks_validation():
 
 def test_mcp_and_sdk_register_strategy_tools():
     names = {spec["name"] for spec in mcp_tool_specs()}
-    for tool in ("propose_strategy", "validate_strategy", "list_strategies"):
+    for tool in ("propose_strategy", "validate_strategy", "list_strategies", "experiment_strategy"):
         assert tool in names
         assert f"mcp__oanda__{tool}" in SDK_TOOLS
 

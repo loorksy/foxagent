@@ -184,6 +184,9 @@ export async function sendAgentMessage(raw: string) {
             useChat.getState().attachStrategyProposal(p.strategy as import("@/lib/types").StrategyRule);
           }
         }
+        if (type === "strategy_experiment" && p.id) {
+          useChat.getState().attachStrategyExperiment(p as unknown as import("@/lib/types").StrategyExperimentJob);
+        }
       },
       controller.signal
     );

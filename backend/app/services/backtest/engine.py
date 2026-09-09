@@ -185,7 +185,11 @@ def strategy_stop(strategy_id: str, candles: list[OHLCV], report: StructureRepor
 
 
 def conditions_ok(conds: dict[str, Any] | None, report: StructureReport) -> bool:
-    flags = conds or {}
+    from app.services.trading_bot.strategy_schema import flags_from_dsl
+
+    flags = dict(conds or {})
+    if flags.get("triggers") or flags.get("conditions"):
+        flags = flags_from_dsl(flags)
     if flags.get("asian_sweep") and not report.liquidity_sweep:
         return False
     if flags.get("fvg_exists") and not report.fvgs:

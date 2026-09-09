@@ -176,6 +176,27 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ reason }),
     }),
+  pinStrategy: (id: string) => http<{ ok: boolean; strategy?: import("./types").StrategyRule }>(`/api/strategies/${id}/pin`, { method: "POST" }),
+  unpinStrategy: (id: string) =>
+    http<{ ok: boolean; strategy?: import("./types").StrategyRule }>(`/api/strategies/${id}/unpin`, { method: "POST" }),
+  botsRoom: () => http<Record<string, unknown>>("/api/bots"),
+  botsNews: () => http<{ open: boolean; windows: Array<Record<string, unknown>> }>("/api/bots/news"),
+  botScans: () => http<{ scans: Array<Record<string, unknown>> }>("/api/bot/scans"),
+  botScan: (id: string) => http<Record<string, unknown>>(`/api/bot/scans/${id}`),
+  haltStrategy: (id: string, reason = "") =>
+    http<{ ok: boolean }>(`/api/bot/strategies/${id}/halt`, { method: "POST", body: JSON.stringify({ reason }) }),
+  labLeaderboard: () => http<{ leaderboard: Array<Record<string, unknown>> }>("/api/lab/leaderboard"),
+  labJobs: () => http<{ jobs: Array<Record<string, unknown>> }>("/api/lab/jobs"),
+  labJob: (id: string) => http<Record<string, unknown>>(`/api/lab/jobs/${id}`),
+  startExperiment: (body: Record<string, unknown>) =>
+    http<{ ok: boolean; job?: Record<string, unknown> }>("/api/lab/experiments", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  briefing: () => http<Record<string, unknown>>("/api/briefing"),
+  journal: () => http<{ entries: Array<Record<string, unknown>> }>("/api/journal"),
+  postmortem: (id: string, body: Record<string, unknown>) =>
+    http<{ ok: boolean }>(`/api/recommendations/${id}/postmortem`, { method: "PATCH", body: JSON.stringify(body) }),
   streamChat: async (
     body: { message: string; symbol: string; timeframe: string; model: string; sessionId?: string },
     onEvent: (event: { type: string; payload: Record<string, unknown> }) => void,

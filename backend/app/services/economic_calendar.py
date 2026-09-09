@@ -47,6 +47,15 @@ WATCHLIST = (
     "ppi",
     "core pce",
     "powell",
+    "fomc minutes",
+    "dot plot",
+    "average hourly",
+    "hourly earnings",
+    "claims",
+    "core cpi",
+    "core pce",
+    "ism manufacturing",
+    "ism services",
 )
 USD_STRENGTH_TITLES = (
     "nfp",

@@ -1,6 +1,7 @@
 "use client";
 
 import { RecommendationCard } from "@/components/chat/RecommendationCard";
+import { PostMortemForm } from "@/components/recs/PostMortemForm";
 import { useRecommendations } from "@/stores/recommendations";
 import { useT } from "@/i18n";
 
@@ -18,7 +19,12 @@ export function RecommendationsPage() {
             {t("recs.empty")}
           </p>
         ) : (
-          items.map((rec) => <RecommendationCard key={rec.id} rec={rec} />)
+          items.map((rec) => (
+            <div key={rec.id}>
+              <RecommendationCard rec={rec} />
+              <PostMortemForm recId={rec.id} defaultThesis={rec.rationale} />
+            </div>
+          ))
         )}
       </div>
     </div>

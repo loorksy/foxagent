@@ -53,8 +53,14 @@ export function DeskLayout({ children }: { children?: React.ReactNode }) {
             ? "calendar"
             : pathname.startsWith("/inbox")
               ? "inbox"
-            : pathname.startsWith("/bot")
+            : pathname.startsWith("/bots") || pathname.startsWith("/bot")
               ? "bot"
+            : pathname.startsWith("/scans")
+              ? "scans"
+            : pathname.startsWith("/briefing")
+              ? "briefing"
+            : pathname.startsWith("/journal")
+              ? "journal"
               : pathname.startsWith("/backtest")
                 ? "backtest"
                 : pathname.startsWith("/strategy-lab")
@@ -186,6 +192,9 @@ export function DeskLayout({ children }: { children?: React.ReactNode }) {
           {section === "calendar" && children}
           {section === "inbox" && children}
           {section === "bot" && children}
+          {section === "scans" && children}
+          {section === "briefing" && children}
+          {section === "journal" && children}
           {section === "backtest" && children}
           {section === "strategyLab" && children}
           {section === "settings" && (children || <SettingsPanel />)}

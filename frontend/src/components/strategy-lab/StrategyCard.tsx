@@ -11,6 +11,7 @@ const STATUS_TONE: Record<string, string> = {
   active: "border-buy/45 bg-buy/10 text-buy",
   rejected: "border-sell/40 bg-sell/10 text-sell",
   archived: "border-border bg-muted/40 text-muted-foreground",
+  experimenting: "border-info/40 bg-info/10 text-info",
 };
 
 export function StrategyCard({ rule, compact = false }: { rule: StrategyRule; compact?: boolean }) {
@@ -19,6 +20,8 @@ export function StrategyCard({ rule, compact = false }: { rule: StrategyRule; co
   const approve = useStrategyLab((s) => s.approve);
   const reject = useStrategyLab((s) => s.reject);
   const remove = useStrategyLab((s) => s.remove);
+  const pin = useStrategyLab((s) => s.pin);
+  const unpin = useStrategyLab((s) => s.unpin);
   const locked = rule.source === "builtin";
   const statusKey = `lab.status.${rule.status}` as MessageKey;
   const sourceKey = `lab.source.${rule.source}` as MessageKey;
@@ -56,8 +59,21 @@ export function StrategyCard({ rule, compact = false }: { rule: StrategyRule; co
           {t("lab.rejectReason")}: {rule.rejection_reason}
         </p>
       ) : null}
+      {locked || rule.status === "validated" || rule.status === "active" || rule.status === "archived" ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {rule.pinned ? (
+            <button type="button" className="rounded-lg border border-border px-3 py-1.5 text-xs" onClick={() => void unpin(rule.id)}>
+              {t("lab.unpin")}
+            </button>
+          ) : (
+            <button type="button" className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold" onClick={() => void pin(rule.id)}>
+              {t("lab.pin")}
+            </button>
+          )}
+        </div>
+      ) : null}
       {locked ? (
-        <p className="mt-3 text-[11px] text-muted-foreground">{t("lab.builtinLocked")}</p>
+        <p className="mt-1 text-[11px] text-muted-foreground">{t("lab.builtinLocked")}</p>
       ) : (
         <div className="mt-3 flex flex-wrap gap-2">
           {rule.status === "draft" || rule.status === "validated" ? (

@@ -1,7 +1,12 @@
 "use client";
 
-import { BotDesk } from "@/components/bot/BotDesk";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
-export default function BotRoute() {
-  return <BotDesk />;
+export default function BotRedirect() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/bots");
+  }, [router]);
+  return null;
 }

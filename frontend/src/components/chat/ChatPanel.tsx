@@ -6,6 +6,7 @@ import { ChatComposer } from "./ChatComposer";
 import { ChatThinking } from "./ChatThinking";
 import { RecommendationCard } from "./RecommendationCard";
 import { StrategyProposalCard } from "@/components/strategy-lab/StrategyProposalCard";
+import { StrategyJobCard } from "@/components/strategy-lab/StrategyJobCard";
 import { ArtifactsWorkspace } from "./ArtifactsWorkspace";
 import { DeskStatusCard } from "@/components/desk/DeskStatusCard";
 import { useChat } from "@/stores/chat";
@@ -122,6 +123,7 @@ export function ChatPanel() {
                         {!m.streaming && m.strategyProposal ? (
                           <StrategyProposalCard rule={m.strategyProposal} validation={m.strategyValidation} />
                         ) : null}
+                        {!m.streaming && m.strategyExperiment ? <StrategyJobCard job={m.strategyExperiment} /> : null}
                         {!m.streaming && m.text ? (
                           m.recommendationId && m.text.length > 200 ? (
                             <details className="group mt-2 rounded-lg border border-border/50 bg-muted/20">

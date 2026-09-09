@@ -157,3 +157,21 @@ class NewsCandleAgent:
                 )
             )
         return signals
+
+    async def window_status(self) -> dict[str, Any]:
+        events = await self._events()
+        now = utcnow()
+        windows = []
+        for event in events:
+            minutes = (now - event.timestamp).total_seconds() / 60.0
+            if -12 <= minutes <= 20:
+                windows.append(
+                    {
+                        "eventId": event.id,
+                        "title": event.title,
+                        "impact": event.impact,
+                        "minutes": round(minutes, 1),
+                        "strategy": pick_news_strategy(minutes, {"decision": "buy"}),
+                    }
+                )
+        return {"open": bool(windows), "windows": windows, "sourceEvents": len(events)}

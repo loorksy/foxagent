@@ -6,6 +6,8 @@ import { BacktestSummary } from "@/components/backtest/BacktestSummary";
 import { BacktestTradesTable } from "@/components/backtest/BacktestTradesTable";
 import { BacktestEquityCurve } from "@/components/backtest/BacktestEquityCurve";
 import { StrategyComparison } from "@/components/backtest/StrategyComparison";
+import { BacktestHistory } from "@/components/backtest/BacktestHistory";
+import { SessionMonthBreakdown } from "@/components/backtest/SessionMonthBreakdown";
 import { useBacktest } from "@/stores/backtest";
 import { useT } from "@/i18n";
 
@@ -26,9 +28,11 @@ export default function BacktestRoute() {
         <p className="mt-1 text-sm text-muted-foreground">{t("backtest.subtitle")}</p>
       </div>
       <BacktestForm />
+      <BacktestHistory />
       {error ? <p className="text-sm text-sell">{error}</p> : null}
       <BacktestSummary />
       <BacktestEquityCurve />
+      <SessionMonthBreakdown />
       <StrategyComparison />
       <BacktestTradesTable />
       {text ? (

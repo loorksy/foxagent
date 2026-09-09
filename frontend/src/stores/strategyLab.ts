@@ -4,7 +4,7 @@ import { create } from "zustand";
 import { api } from "@/lib/api";
 import type { StrategyRule, StrategyValidation } from "@/lib/types";
 
-type LabTab = "library" | "create" | "proposed" | "results";
+type LabTab = "library" | "create" | "proposed" | "results" | "jobs" | "leaderboard";
 
 type StrategyLabState = {
   items: StrategyRule[];
@@ -21,6 +21,8 @@ type StrategyLabState = {
   validate: (id: string, autoActivate?: boolean) => Promise<StrategyValidation | null>;
   approve: (id: string) => Promise<void>;
   reject: (id: string, reason?: string) => Promise<void>;
+  pin: (id: string) => Promise<void>;
+  unpin: (id: string) => Promise<void>;
 };
 
 function asRule(raw: unknown): StrategyRule | null {
@@ -81,10 +83,10 @@ export const useStrategyLab = create<StrategyLabState>((set, get) => ({
       set({ error: err instanceof Error ? err.message : "delete failed" });
     }
   },
-  validate: async (id, autoActivate = false) => {
+  validate: async (id) => {
     set({ error: "" });
     try {
-      const result = await api.validateStrategy(id, { autoActivate, days: 730 });
+      const result = await api.validateStrategy(id, { days: 730 });
       set((s) => ({ lastValidation: result, history: [result, ...s.history].slice(0, 12) }));
       await get().load();
       return result;
@@ -110,6 +112,22 @@ export const useStrategyLab = create<StrategyLabState>((set, get) => ({
       await get().load();
     } catch (err) {
       set({ error: err instanceof Error ? err.message : "reject failed" });
+    }
+  },
+  pin: async (id) => {
+    try {
+      await api.pinStrategy(id);
+      await get().load();
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "pin failed" });
+    }
+  },
+  unpin: async (id) => {
+    try {
+      await api.unpinStrategy(id);
+      await get().load();
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "unpin failed" });
     }
   },
 }));

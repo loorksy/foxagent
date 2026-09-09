@@ -81,7 +81,7 @@ export type Instrument = {
 
 export type ChatRole = "user" | "assistant" | "system";
 
-export type StrategyStatus = "draft" | "validated" | "active" | "rejected" | "archived";
+export type StrategyStatus = "draft" | "validated" | "active" | "rejected" | "archived" | "experimenting";
 export type StrategySource = "builtin" | "claude_proposed" | "manual";
 
 export type StrategyRule = {
@@ -92,6 +92,9 @@ export type StrategyRule = {
   timeframe?: string[];
   direction: "buy" | "sell" | "both";
   entry_conditions: Record<string, unknown>;
+  sessions?: string[];
+  dsl?: Record<string, unknown>;
+  pinned?: boolean;
   stop_rule: string;
   tp1_r: number;
   tp2_r: number;
@@ -115,6 +118,31 @@ export type StrategyValidation = {
   detail?: string;
 };
 
+export type StrategyExperimentAttempt = {
+  n: number;
+  change: string;
+  passed: boolean;
+  reasons?: string[];
+  strategy?: StrategyRule;
+  report?: {
+    winRate?: number | null;
+    profitFactor?: number | null;
+    maxDrawdownR?: number | null;
+    totalTrades?: number | null;
+  };
+};
+
+export type StrategyExperimentJob = {
+  id: string;
+  strategyId: string;
+  status: string;
+  attempts: StrategyExperimentAttempt[];
+  maxAttempts: number;
+  createdAt?: string;
+  passed: boolean;
+  best?: StrategyExperimentAttempt | null;
+};
+
 export type ChatMessage = {
   id: string;
   role: ChatRole;
@@ -124,6 +152,7 @@ export type ChatMessage = {
   streaming?: boolean;
   strategyProposal?: StrategyRule;
   strategyValidation?: StrategyValidation;
+  strategyExperiment?: StrategyExperimentJob;
 };
 
 export type StructureFvg = {

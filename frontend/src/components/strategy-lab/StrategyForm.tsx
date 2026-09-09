@@ -6,6 +6,7 @@ import { useT, type MessageKey } from "@/i18n";
 
 const TFS = ["M15", "H1", "H4", "D"] as const;
 const FLAGS = ["asian_sweep", "fvg_exists", "bos_confirmed", "breakout", "trend", "reversal", "scalp"] as const;
+const SESSIONS = ["asia", "london", "ny", "london_ny_overlap", "london_close"] as const;
 
 export function StrategyForm() {
   const t = useT();
@@ -20,6 +21,7 @@ export function StrategyForm() {
   const [tp2, setTp2] = useState(3);
   const [hold, setHold] = useState(48);
   const [flags, setFlags] = useState<string[]>(["fvg_exists"]);
+  const [sessions, setSessions] = useState<string[]>(["asia", "london", "ny", "london_ny_overlap", "london_close"]);
 
   function toggleTf(tf: string) {
     setTimeframes((cur) => (cur.includes(tf) ? cur.filter((x) => x !== tf) : [...cur, tf]));
@@ -43,6 +45,7 @@ export function StrategyForm() {
       tp2_r: tp2,
       max_holding_bars: hold,
       entry_conditions,
+      sessions,
       source: "manual",
     });
     if (created) {
@@ -81,6 +84,21 @@ export function StrategyForm() {
           <option value="sell">{t("lab.direction.sell")}</option>
         </select>
       </label>
+      <div className="text-xs text-muted-foreground">
+        {t("lab.sessions")}
+        <div className="mt-1 flex flex-wrap gap-2">
+          {SESSIONS.map((session) => (
+            <label key={session} className="flex items-center gap-1 rounded-full border border-border px-2 py-1">
+              <input
+                type="checkbox"
+                checked={sessions.includes(session)}
+                onChange={() => setSessions((cur) => (cur.includes(session) ? cur.filter((x) => x !== session) : [...cur, session]))}
+              />
+              {t(`lab.session.${session}` as MessageKey)}
+            </label>
+          ))}
+        </div>
+      </div>
       <div className="text-xs text-muted-foreground">
         {t("lab.conditions")}
         <div className="mt-1 flex flex-wrap gap-2">

@@ -601,8 +601,7 @@ async def strategies_validate(strategy_id: str, body: dict | None = Body(default
     from app.services.trading_bot.strategy_library import get_library
 
     payload = body or {}
-    auto = bool(payload.get("autoActivate") or payload.get("auto_activate"))
-    result = await get_library().validate(strategy_id, days=int(payload.get("days") or 730), auto_activate=auto)
+    result = await get_library().validate(strategy_id, days=int(payload.get("days") or 730), auto_activate=False)
     if result.get("paused"):
         raise HTTPException(409, str(result.get("detail") or "FoxAgent is paused"))
     return _strategy_result(result)
@@ -621,6 +620,168 @@ async def strategies_reject(strategy_id: str, body: dict | None = Body(default=N
 
     reason = str((body or {}).get("reason") or (body or {}).get("rejection_reason") or "")
     return _strategy_result(await get_library().reject(strategy_id, reason))
+
+
+@router.post("/strategies/{strategy_id}/pin")
+async def strategies_pin(strategy_id: str) -> dict:
+    from app.services.trading_bot.strategy_library import get_library
+
+    return _strategy_result(await get_library().pin(strategy_id, True))
+
+
+@router.post("/strategies/{strategy_id}/unpin")
+async def strategies_unpin(strategy_id: str) -> dict:
+    from app.services.trading_bot.strategy_library import get_library
+
+    return _strategy_result(await get_library().pin(strategy_id, False))
+
+
+@router.get("/bots")
+async def bots_room() -> dict:
+    from app.services.settings_store import load_runtime_settings
+    from app.services.trading_bot import get_coordinator
+    from app.services.trading_bot.circuit import snapshot as circuit_snap
+    from app.services.trading_bot.news_candle_agent import NewsCandleAgent
+
+    runtime = await load_runtime_settings()
+    agents = list(getattr(runtime, "botAgents", None) or ["multi_strategy", "pattern_notes", "news_candle"])
+    news = await NewsCandleAgent().window_status()
+    return {
+        "running": get_coordinator().snapshot(),
+        "enabled": bool(runtime.botEnabled),
+        "paused": await is_paused(),
+        "agents": agents,
+        "circuits": await circuit_snap(),
+        "news": news,
+    }
+
+
+@router.get("/bots/news")
+async def bots_news() -> dict:
+    from app.services.trading_bot.news_candle_agent import NewsCandleAgent
+
+    return await NewsCandleAgent().window_status()
+
+
+@router.get("/bot/scans")
+async def bot_scans() -> dict:
+    from app.services.trading_bot.scans import list_scans
+
+    return {"scans": list_scans(40)}
+
+
+@router.get("/bot/scans/{scan_id}")
+async def bot_scan_get(scan_id: str) -> dict:
+    from app.services.trading_bot.scans import get_scan
+
+    item = get_scan(scan_id)
+    if not item:
+        raise HTTPException(404, "Not found")
+    return item
+
+
+@router.post("/bot/strategies/{strategy_id}/halt")
+async def bot_strategy_halt(strategy_id: str, body: dict | None = Body(default=None)) -> dict:
+    from app.services.trading_bot.circuit import halt
+
+    reason = str((body or {}).get("reason") or "operator halt")
+    return {"ok": True, "circuit": await halt(strategy_id, reason)}
+
+
+@router.post("/bot/strategies/{strategy_id}/resume")
+async def bot_strategy_resume(strategy_id: str) -> dict:
+    from app.services.trading_bot.circuit import resume_strategy
+
+    return {"ok": True, "circuit": await resume_strategy(strategy_id)}
+
+
+@router.get("/lab/leaderboard")
+async def lab_leaderboard() -> dict:
+    from app.services.trading_bot.strategy_library import get_library
+    from app.services.backtest.store import list_reports
+
+    reports = await list_reports(40)
+    by_id: dict[str, dict] = {}
+    for rep in reports:
+        sid = str(rep.get("strategyId") or "")
+        if sid and sid not in by_id:
+            by_id[sid] = rep
+    rows = []
+    for rule in await get_library().get_all():
+        rep = by_id.get(rule.id) or {}
+        rows.append(
+            {
+                "id": rule.id,
+                "name": rule.name,
+                "status": rule.status,
+                "pinned": rule.pinned,
+                "winRate": rep.get("winRate"),
+                "profitFactor": rep.get("profitFactor"),
+                "maxDrawdownR": rep.get("maxDrawdownR"),
+                "totalTrades": rep.get("totalTrades"),
+                "validatedAt": rule.validated_at,
+            }
+        )
+    rows.sort(key=lambda r: (-float(r.get("profitFactor") or 0), -float(r.get("winRate") or 0)))
+    return {"leaderboard": rows}
+
+
+@router.post("/lab/experiments")
+async def lab_experiment_start(body: dict = Body(...)) -> dict:
+    from app.services.trading_bot.experiment import start_experiment
+
+    result = await start_experiment(body)
+    if result.get("paused"):
+        raise HTTPException(409, str(result.get("detail") or "paused"))
+    return _strategy_result(result)
+
+
+@router.get("/lab/jobs")
+async def lab_jobs() -> dict:
+    from app.services.trading_bot.experiment import list_jobs
+
+    return {"jobs": list_jobs()}
+
+
+@router.get("/lab/jobs/{job_id}")
+async def lab_job_get(job_id: str) -> dict:
+    from app.services.trading_bot.experiment import get_job
+
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(404, "Not found")
+    return job
+
+
+@router.get("/briefing")
+async def briefing_get() -> dict:
+    from app.services.briefing import build_briefing
+
+    return await build_briefing()
+
+
+@router.post("/telegram/commands")
+async def telegram_commands(body: dict = Body(...)) -> dict:
+    from app.services.telegram_ops import handle_command
+
+    return await handle_command(str(body.get("text") or ""), str(body.get("chatId") or body.get("chat_id") or ""))
+
+
+@router.get("/journal")
+async def journal_list() -> dict:
+    from app.services.journal import list_journal
+
+    return {"entries": list_journal()}
+
+
+@router.patch("/recommendations/{rec_id}/postmortem")
+async def rec_postmortem(rec_id: str, body: dict = Body(...)) -> dict:
+    from app.services.journal import write_postmortem
+
+    result = await write_postmortem(rec_id, body)
+    if not result.get("ok"):
+        raise HTTPException(404, str(result.get("detail") or "Not found"))
+    return result
 
 
 @router.get("/models")
