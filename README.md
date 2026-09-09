@@ -4,6 +4,8 @@ Autonomous ICT / Smart Money trading workstation: **Claude Agent SDK** + **OANDA
 
 **التوثيق الشامل بالعربية (من الألف إلى الياء):** [docs/FOXAGENT_REFERENCE_AR.md](docs/FOXAGENT_REFERENCE_AR.md)
 
+**خطة التطوير الموحدة (عشر سفن):** [docs/DEVELOPMENT_PLAN_AR.md](docs/DEVELOPMENT_PLAN_AR.md)
+
 **دليل بوت الذهب (عربي / English):** [docs/TRADING_BOT_GUIDE.md](docs/TRADING_BOT_GUIDE.md)
 
 **دليل باك تست الذهب:** [docs/BACKTEST_GUIDE.md](docs/BACKTEST_GUIDE.md)
