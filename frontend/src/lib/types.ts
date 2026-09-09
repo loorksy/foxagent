@@ -383,3 +383,65 @@ export type StrategyPerf = {
   averageLoss?: number;
   profitFactor?: number;
 };
+
+export type InboxTab = "inbox" | "approvals" | "alerts";
+
+export type InboxItem = {
+  id: string;
+  tab: InboxTab;
+  kind: "signal" | "recommendation" | "warehouse" | "news" | "bot";
+  title: string;
+  summary: string;
+  severity: "high" | "medium" | "low";
+  href: string;
+  sourceHref: string;
+  createdAt?: string | null;
+  payload?: {
+    signal?: BotSignal;
+    recommendation?: TradeRecommendation;
+    rejectionReason?: string;
+    event?: EconomicEvent;
+    minutes?: number;
+    timeframes?: string[];
+  };
+};
+
+export type InboxCounts = {
+  open: number;
+  inbox: number;
+  approvals: number;
+  alerts: number;
+};
+
+export type DeskStatus = {
+  paused: boolean;
+  botRunning: boolean;
+  botEnabled?: boolean;
+  warehouseStale: boolean;
+  nextEventTitle?: string | null;
+  nextEventMinutes?: number | null;
+  openCount: number;
+  lastError?: string;
+};
+
+export type InboxSnapshot = {
+  items: InboxItem[];
+  counts: InboxCounts;
+  desk: DeskStatus;
+};
+
+export type PreflightCheck = {
+  id: string;
+  ok: boolean;
+  blocking: boolean;
+  label: string;
+  detail: string;
+};
+
+export type PreflightReport = {
+  ok: boolean;
+  blocking: boolean;
+  paused?: boolean;
+  botRunning?: boolean;
+  checks: PreflightCheck[];
+};

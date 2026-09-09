@@ -51,6 +51,8 @@ export function DeskLayout({ children }: { children?: React.ReactNode }) {
           ? "memory"
           : pathname.startsWith("/calendar")
             ? "calendar"
+            : pathname.startsWith("/inbox")
+              ? "inbox"
             : pathname.startsWith("/bot")
               ? "bot"
               : pathname.startsWith("/backtest")
@@ -182,6 +184,7 @@ export function DeskLayout({ children }: { children?: React.ReactNode }) {
           {section === "recommendations" && (children || <RecommendationsPage />)}
           {section === "memory" && (children || <MemoryPage />)}
           {section === "calendar" && children}
+          {section === "inbox" && children}
           {section === "bot" && children}
           {section === "backtest" && children}
           {section === "strategyLab" && children}

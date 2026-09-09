@@ -323,6 +323,71 @@ async def economic_calendar_upcoming() -> dict:
     return await economic_calendar(hours_ahead=48, min_impact="medium")
 
 
+@router.get("/inbox")
+async def inbox_list(tab: str | None = None) -> dict:
+    from app.services.inbox import snapshot
+
+    return await snapshot(tab)
+
+
+@router.get("/inbox/summary")
+async def inbox_summary() -> dict:
+    from app.services.inbox import desk_status, list_items, snapshot
+
+    items = await list_items()
+    desk = await desk_status()
+    snap = await snapshot()
+    return {"openCount": desk.get("openCount") or 0, "counts": snap.get("counts"), "desk": desk, "items": items[:8]}
+
+
+@router.get("/inbox/{item_id}")
+async def inbox_item(item_id: str) -> dict:
+    from app.services.inbox import get_item
+
+    item = await get_item(item_id)
+    if not item:
+        raise HTTPException(404, "Not found")
+    return item
+
+
+@router.post("/inbox/{item_id}/ack")
+async def inbox_ack(item_id: str) -> dict:
+    from app.services.inbox import ack_item
+
+    result = await ack_item(item_id)
+    if not result.get("ok"):
+        raise HTTPException(400, str(result.get("detail") or "Cannot ack"))
+    return result
+
+
+@router.get("/approvals")
+async def approvals_list() -> dict:
+    from app.services.inbox import snapshot
+
+    return await snapshot("approvals")
+
+
+@router.post("/approvals/{item_id}/approve")
+async def approvals_approve(item_id: str) -> dict:
+    from app.services.inbox import approve_signal
+
+    result = await approve_signal(item_id)
+    if not result.get("ok"):
+        raise HTTPException(400, str(result.get("detail") or result.get("reasons") or "Rejected"))
+    return result
+
+
+@router.post("/approvals/{item_id}/reject")
+async def approvals_reject(item_id: str, body: dict = Body(default={})) -> dict:
+    from app.services.inbox import reject_signal
+
+    reason = str(body.get("reason") or body.get("rejectionReason") or "")
+    result = await reject_signal(item_id, reason)
+    if not result.get("ok"):
+        raise HTTPException(400, str(result.get("detail") or "Cannot reject"))
+    return result
+
+
 @router.get("/bot/status")
 async def bot_status() -> dict:
     from app.services.trading_bot import get_coordinator
@@ -337,17 +402,29 @@ async def bot_status() -> dict:
     return snap
 
 
+@router.get("/bot/preflight")
+async def bot_preflight() -> dict:
+    from app.services.preflight import run_preflight
+
+    return await run_preflight()
+
+
 @router.post("/bot/start")
-async def bot_start() -> dict:
+async def bot_start(force: bool = False) -> dict:
+    from app.services.preflight import run_preflight
     from app.services.trading_bot import get_coordinator
     from app.services.settings_store import load_runtime_settings, save_runtime_settings
 
+    report = await run_preflight()
+    if report.get("blocking") and not force:
+        raise HTTPException(409, detail={"preflight": report, "detail": "Preflight blocked start"})
     runtime = await load_runtime_settings()
     runtime.botEnabled = True
     await save_runtime_settings(runtime)
     if await is_paused():
-        return {**get_coordinator().snapshot(), "enabled": True, "paused": True}
-    return await get_coordinator().start()
+        return {**get_coordinator().snapshot(), "enabled": True, "paused": True, "preflight": report}
+    started = await get_coordinator().start()
+    return {**started, "enabled": True, "paused": False, "preflight": report}
 
 
 @router.post("/bot/stop")

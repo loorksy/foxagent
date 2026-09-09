@@ -7,7 +7,9 @@ import { ChatThinking } from "./ChatThinking";
 import { RecommendationCard } from "./RecommendationCard";
 import { StrategyProposalCard } from "@/components/strategy-lab/StrategyProposalCard";
 import { ArtifactsWorkspace } from "./ArtifactsWorkspace";
+import { DeskStatusCard } from "@/components/desk/DeskStatusCard";
 import { useChat } from "@/stores/chat";
+import { useInbox } from "@/stores/inbox";
 import { useRecommendations } from "@/stores/recommendations";
 import { useSessions } from "@/stores/sessions";
 import { cn } from "@/lib/utils";
@@ -21,6 +23,7 @@ export function ChatPanel() {
   const highlight = useChat((s) => s.highlight);
   const recs = useRecommendations((s) => s.items);
   const persistActive = useSessions((s) => s.persistActive);
+  const desk = useInbox((s) => s.desk);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const dockRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -73,6 +76,9 @@ export function ChatPanel() {
             </h2>
             <div className="w-full">
               <ChatComposer hero />
+            </div>
+            <div className="w-full max-w-lg text-start">
+              <DeskStatusCard desk={desk} compact />
             </div>
           </div>
         )}

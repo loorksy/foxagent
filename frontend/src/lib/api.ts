@@ -95,8 +95,31 @@ export const api = {
     ),
   economicCalendarUpcoming: () =>
     http<{ events: import("./types").EconomicEvent[]; source: string }>(`/api/economic-calendar/upcoming`),
+  inbox: (tab?: string) =>
+    http<import("./types").InboxSnapshot>(tab ? `/api/inbox?tab=${encodeURIComponent(tab)}` : "/api/inbox"),
+  inboxSummary: () =>
+    http<{ openCount: number; counts: import("./types").InboxCounts; desk: import("./types").DeskStatus }>(
+      "/api/inbox/summary"
+    ),
+  inboxItem: (id: string) => http<import("./types").InboxItem>(`/api/inbox/${encodeURIComponent(id)}`),
+  ackInbox: (id: string) => http<{ ok: boolean }>(`/api/inbox/${encodeURIComponent(id)}/ack`, { method: "POST" }),
+  approveInbox: (id: string) =>
+    http<{ ok: boolean; recommendation?: import("./types").TradeRecommendation }>(
+      `/api/approvals/${encodeURIComponent(id)}/approve`,
+      { method: "POST" }
+    ),
+  rejectInbox: (id: string, reason: string) =>
+    http<{ ok: boolean; signal?: import("./types").BotSignal }>(`/api/approvals/${encodeURIComponent(id)}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+  botPreflight: () => http<import("./types").PreflightReport>("/api/bot/preflight"),
   botStatus: () => http<import("./types").BotStatus>("/api/bot/status"),
-  botStart: () => http<import("./types").BotStatus>("/api/bot/start", { method: "POST" }),
+  botStart: (force = false) =>
+    http<import("./types").BotStatus & { preflight?: import("./types").PreflightReport }>(
+      force ? "/api/bot/start?force=true" : "/api/bot/start",
+      { method: "POST" }
+    ),
   botStop: () => http<import("./types").BotStatus>("/api/bot/stop", { method: "POST" }),
   botSignals: () => http<{ signals: import("./types").BotSignal[] }>("/api/bot/signals"),
   botSignal: (id: string) => http<import("./types").BotSignal>(`/api/bot/signals/${id}`),
