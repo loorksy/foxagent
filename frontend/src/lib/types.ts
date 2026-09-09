@@ -143,6 +143,20 @@ export type StrategyExperimentJob = {
   best?: StrategyExperimentAttempt | null;
 };
 
+export type TokenUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens?: number;
+  cacheReadTokens?: number;
+  totalTokens: number;
+  estimatedUsd?: number;
+  model?: string;
+  agent?: string;
+  path?: string;
+  runId?: string;
+  calls?: number;
+};
+
 export type ChatMessage = {
   id: string;
   role: ChatRole;
@@ -153,6 +167,7 @@ export type ChatMessage = {
   strategyProposal?: StrategyRule;
   strategyValidation?: StrategyValidation;
   strategyExperiment?: StrategyExperimentJob;
+  usage?: TokenUsage;
 };
 
 export type StructureFvg = {

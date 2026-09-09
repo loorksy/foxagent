@@ -120,10 +120,14 @@ async def run_chat(req: ChatRequest, emit: Emit) -> dict[str, Any]:
     from app.services.crew import run_crew
     from app.services.session_store import append_session_event, ensure_session, save_session
 
+    from app.services.token_usage import UsageTracker, bind_usage_tracker, reset_usage_tracker
+
     run_id = new_id("run")
     rec: TradeRecommendation | None = None
     session = await ensure_session(req.sessionId, req.symbol, req.timeframe)
     session_id = session["id"]
+    tracker = UsageTracker(run_id=run_id, model=req.model or "")
+    usage_token = bind_usage_tracker(tracker)
     await emit(
         "run_start",
         {
@@ -139,6 +143,13 @@ async def run_chat(req: ChatRequest, emit: Emit) -> dict[str, Any]:
         {"role": "user", "text": req.message, "createdAt": __import__("time").time() * 1000},
     )
 
+    async def complete(payload: dict[str, Any]) -> dict[str, Any]:
+        usage = tracker.public()
+        payload = {**payload, "usage": usage}
+        await emit("usage", usage)
+        await emit("run_complete", payload)
+        return usage
+
     try:
         from app.services.run_control import RunCancelled, SystemPaused, clear_cancel, raise_if_paused
 
@@ -152,25 +163,24 @@ async def run_chat(req: ChatRequest, emit: Emit) -> dict[str, Any]:
     except SystemPaused as exc:
         detail = str(exc)
         await emit("error", {"runId": run_id, "sessionId": session_id, "detail": detail, "paused": True})
-        await emit("run_complete", {"runId": run_id, "sessionId": session_id, "engine": None, "paused": True, "error": detail})
+        await complete({"runId": run_id, "sessionId": session_id, "engine": None, "paused": True, "error": detail})
         return {"runId": run_id, "sessionId": session_id, "engine": None, "recommendation": None, "error": detail, "paused": True}
     except RunCancelled:
         await emit("cancelled", {"runId": run_id, "sessionId": session_id})
-        await emit("run_complete", {"runId": run_id, "sessionId": session_id, "engine": "multi-agent-crew", "cancelled": True})
+        await complete({"runId": run_id, "sessionId": session_id, "engine": "multi-agent-crew", "cancelled": True})
         clear_cancel(run_id)
         return {"runId": run_id, "sessionId": session_id, "engine": "multi-agent-crew", "recommendation": None, "cancelled": True}
     except AgentUnavailable as exc:
         logger.warning("Agent unavailable: %s", exc.detail)
         await emit("error", {"runId": run_id, "sessionId": session_id, "detail": exc.detail})
-        await emit(
-            "run_complete",
+        await complete(
             {
                 "runId": run_id,
                 "sessionId": session_id,
                 "engine": None,
                 "recommendationId": None,
                 "error": exc.detail,
-            },
+            }
         )
         return {
             "runId": run_id,
@@ -179,6 +189,8 @@ async def run_chat(req: ChatRequest, emit: Emit) -> dict[str, Any]:
             "recommendation": None,
             "error": exc.detail,
         }
+    finally:
+        reset_usage_tracker(usage_token)
 
     if rec:
         session["title"] = req.message.strip()[:80] or session.get("title") or req.symbol
@@ -188,21 +200,21 @@ async def run_chat(req: ChatRequest, emit: Emit) -> dict[str, Any]:
         await append_session_event(
             session_id,
             "message",
-            {"role": "assistant", "text": rec.rationale, "recommendationId": rec.id},
+            {"role": "assistant", "text": rec.rationale, "recommendationId": rec.id, "usage": tracker.public()},
         )
 
-    await emit(
-        "run_complete",
+    usage = await complete(
         {
             "runId": run_id,
             "sessionId": session_id,
             "engine": "multi-agent-crew",
             "recommendationId": rec.id if rec else None,
-        },
+        }
     )
     return {
         "runId": run_id,
         "sessionId": session_id,
         "engine": "multi-agent-crew",
         "recommendation": rec.model_dump(mode="json") if rec else None,
+        "usage": usage,
     }

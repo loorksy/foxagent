@@ -4,7 +4,8 @@ import { useBacktest } from "@/stores/backtest";
 import { useT } from "@/i18n";
 
 export function BacktestTradesTable() {
-  const trades = useBacktest((s) => s.report?.trades || []);
+  const report = useBacktest((s) => s.report);
+  const trades = report?.trades ?? [];
   const t = useT();
   if (!trades.length) return <p className="text-sm text-muted-foreground">{t("backtest.empty")}</p>;
   return (

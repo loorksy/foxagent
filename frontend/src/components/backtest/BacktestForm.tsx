@@ -16,8 +16,8 @@ export function BacktestForm() {
   const [days, setDays] = useState(365);
 
   useEffect(() => {
-    if (!strategies.length) void loadLab();
-  }, [loadLab, strategies.length]);
+    if (!useStrategyLab.getState().items.length) void loadLab();
+  }, [loadLab]);
 
   const active = strategies.filter((r) => r.status === "active");
   const options = active.length
