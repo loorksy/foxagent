@@ -10,11 +10,14 @@ import { useWorkspace } from "@/stores/workspace";
 import { useCatalog } from "@/stores/catalog";
 import { cn } from "@/lib/utils";
 import { useT, type MessageKey } from "@/i18n";
+import { ChatUsageMeter } from "./ChatUsageMeter";
 
 export function ChatComposer({ hero = false }: { hero?: boolean }) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const streaming = useChat((s) => s.streaming);
+  const sessionUsage = useChat((s) => s.sessionUsage);
+  const runUsage = useChat((s) => s.runUsage);
   const model = useChat((s) => s.model);
   const setModel = useChat((s) => s.setModel);
   const symbol = useWorkspace((s) => s.symbol);
@@ -151,9 +154,10 @@ export function ChatComposer({ hero = false }: { hero?: boolean }) {
           </div>
         </div>
       </form>
-      <p className="mt-1.5 px-2 text-center text-[10px] leading-4 text-muted-foreground/60">
-        {t("chat.disclaimer")}
-      </p>
+      <div className="mt-1.5 flex flex-col items-center gap-0.5 px-2">
+        <ChatUsageMeter usage={streaming ? runUsage : sessionUsage} label={streaming ? t("chat.usage.run") : t("chat.usage.session")} live={streaming} />
+        <p className="text-center text-[10px] leading-4 text-muted-foreground/60">{t("chat.disclaimer")}</p>
+      </div>
     </div>
   );
 }
