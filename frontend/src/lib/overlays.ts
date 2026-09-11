@@ -60,32 +60,41 @@ export function clearOverlays(chart: ChartLike) {
   }
 }
 
+/**
+ * Create a single overlay on the chart. `index` is the overlay's position in
+ * its batch and drives the default id / zLevel, so callers that split a batch
+ * (e.g. the agent drawing animation) must pass the original batch index to
+ * keep ids identical to a plain applyOverlays call.
+ */
+export function createChartOverlay(chart: ChartLike, ov: KlineOverlay, index: number) {
+  const name = NAME_MAP[ov.name] || ov.name;
+  const extend =
+    ov.extendData ??
+    (name === "simpleAnnotation" ? ov.annotationText : ov.annotationText);
+  try {
+    chart.createOverlay({
+      name,
+      id: ov.id || `${ov.groupId || name}_${index}`,
+      groupId: ov.groupId || "foxagent",
+      lock: ov.lock ?? true,
+      visible: ov.visible ?? true,
+      zLevel: ov.zLevel ?? index,
+      points: ov.points,
+      extendData: extend,
+      styles: overlayStyles(name, ov.styles),
+    });
+  } catch {
+    /* overlay type may be missing */
+  }
+}
+
 export async function applyOverlays(
   chart: ChartLike,
   overlays: KlineOverlay[],
   animate = true
 ) {
   for (let i = 0; i < overlays.length; i += 1) {
-    const ov = overlays[i];
-    const name = NAME_MAP[ov.name] || ov.name;
-    const extend =
-      ov.extendData ??
-      (name === "simpleAnnotation" ? ov.annotationText : ov.annotationText);
-    try {
-      chart.createOverlay({
-        name,
-        id: ov.id || `${ov.groupId || name}_${i}`,
-        groupId: ov.groupId || "foxagent",
-        lock: ov.lock ?? true,
-        visible: ov.visible ?? true,
-        zLevel: ov.zLevel ?? i,
-        points: ov.points,
-        extendData: extend,
-        styles: overlayStyles(name, ov.styles),
-      });
-    } catch {
-      /* overlay type may be missing */
-    }
+    createChartOverlay(chart, overlays[i], i);
     if (animate) {
       await new Promise((r) => setTimeout(r, 140));
     }

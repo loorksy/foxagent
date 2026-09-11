@@ -61,6 +61,12 @@ async def set_paused(paused: bool) -> bool:
         await get_coordinator().on_pause_changed(paused)
     except Exception:
         pass
+    try:
+        from app.services.trading_bot.instances import get_manager
+
+        await get_manager().on_pause_changed(paused)
+    except Exception:
+        pass
     return paused
 
 

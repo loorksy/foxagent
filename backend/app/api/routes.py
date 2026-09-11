@@ -232,7 +232,21 @@ async def settings_validate(body: dict) -> dict:
         token = body.get("telegramBotToken") or runtime.telegramBotToken
         chat = body.get("telegramChatId") or runtime.telegramChatId
         return await send_test_ping(token, chat)
+    if target == "metaapi":
+        from app.services.metaapi import validate_metaapi
+
+        return await validate_metaapi(
+            body.get("metaapiToken") or "",
+            body.get("metaapiAccountId") or "",
+        )
     return {"ok": False, "detail": "Unknown target"}
+
+
+@router.get("/mt5/status")
+async def mt5_status() -> dict:
+    from app.services.metaapi import get_status
+
+    return await get_status()
 
 
 @router.post("/agent/chat")
@@ -572,6 +586,14 @@ async def strategies_create(body: dict = Body(...)) -> dict:
     return _strategy_result(await get_library().propose(body, source=source, created_by=created_by))
 
 
+@router.post("/strategies/lint-code")
+async def strategies_lint_code(body: dict = Body(...)) -> dict:
+    """Static syntax check for python-kind strategy code. Never executes it."""
+    from app.services.trading_bot.code_runner import lint_code
+
+    return lint_code(str(body.get("code") or ""))
+
+
 @router.get("/strategies/{strategy_id}")
 async def strategies_get(strategy_id: str) -> dict:
     from app.services.trading_bot.strategy_library import get_library
@@ -693,6 +715,140 @@ async def bot_strategy_resume(strategy_id: str) -> dict:
     from app.services.trading_bot.circuit import resume_strategy
 
     return {"ok": True, "circuit": await resume_strategy(strategy_id)}
+
+
+def _bots_manager():
+    from app.services.trading_bot.instances import get_manager
+
+    return get_manager()
+
+
+@router.get("/bots/instances")
+async def bot_instances_list() -> dict:
+    mgr = _bots_manager()
+    await mgr.ensure_default()
+    return {"instances": await mgr.list_snapshots(), "paused": await is_paused()}
+
+
+@router.post("/bots/instances")
+async def bot_instances_create(body: dict = Body(...)) -> dict:
+    from app.services.trading_bot.instances import (
+        ExecutionNotAllowed,
+        assert_execution_allowed,
+        instance_from_payload,
+        save_instance,
+    )
+
+    mgr = _bots_manager()
+    await mgr.ensure_default()
+    try:
+        inst = instance_from_payload(body)
+        if inst.type == "execution":
+            await assert_execution_allowed()
+    except ExecutionNotAllowed as exc:
+        raise HTTPException(400, str(exc))
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(400, str(exc) or "طلب غير صالح")
+    await save_instance(inst)
+    if inst.enabled:
+        try:
+            return {"ok": True, **(await mgr.start_instance(inst.id))}
+        except ExecutionNotAllowed as exc:
+            raise HTTPException(400, str(exc))
+    return {"ok": True, **mgr.instance_snapshot(inst)}
+
+
+@router.patch("/bots/instances/{bot_id}")
+async def bot_instances_patch(bot_id: str, body: dict = Body(...)) -> dict:
+    from app.services.trading_bot.instances import (
+        AGENT_KINDS,
+        ExecutionNotAllowed,
+        assert_execution_allowed,
+        get_instance,
+        save_instance,
+    )
+
+    mgr = _bots_manager()
+    inst = await get_instance(bot_id)
+    if inst is None:
+        raise HTTPException(404, "Bot not found")
+    if "name" in body:
+        inst.name = str(body["name"]).strip() or inst.name
+    if "scanIntervalSeconds" in body:
+        inst.scanIntervalSeconds = max(5, int(body["scanIntervalSeconds"] or 60))
+    if "agents" in body:
+        agents = [a for a in (body["agents"] or []) if a in AGENT_KINDS]
+        if agents:
+            inst.agents = agents
+    if "strategyIds" in body:
+        inst.strategyIds = [str(s) for s in (body["strategyIds"] or [])]
+    if "minRr" in body:
+        inst.minRr = max(0.5, float(body["minRr"] or inst.minRr))
+    if "maxRiskPercent" in body:
+        inst.maxRiskPercent = max(0.05, float(body["maxRiskPercent"] or inst.maxRiskPercent))
+    if "allowedSessions" in body:
+        inst.allowedSessions = [str(s) for s in (body["allowedSessions"] or [])]
+    if "orderVolume" in body:
+        inst.orderVolume = max(0.01, float(body["orderVolume"] or inst.orderVolume))
+    if "autoExecute" in body:
+        inst.autoExecute = bool(body["autoExecute"]) and inst.type == "execution"
+    enable = body.get("enabled")
+    if enable is not None and bool(enable) and inst.type == "execution":
+        try:
+            await assert_execution_allowed()
+        except ExecutionNotAllowed as exc:
+            raise HTTPException(400, str(exc))
+    await save_instance(inst)
+    mgr.refresh(inst)
+    if enable is not None:
+        if bool(enable):
+            try:
+                return {"ok": True, **(await mgr.start_instance(bot_id))}
+            except ExecutionNotAllowed as exc:
+                raise HTTPException(400, str(exc))
+        return {"ok": True, **(await mgr.stop_instance(bot_id))}
+    return {"ok": True, **mgr.instance_snapshot(inst)}
+
+
+@router.delete("/bots/instances/{bot_id}")
+async def bot_instances_delete(bot_id: str) -> dict:
+    from app.services.trading_bot.instances import get_instance
+
+    if await get_instance(bot_id) is None:
+        raise HTTPException(404, "Bot not found")
+    ok = await _bots_manager().remove_instance(bot_id)
+    return {"ok": bool(ok), "deleted": bot_id}
+
+
+@router.post("/bots/instances/{bot_id}/start")
+async def bot_instances_start(bot_id: str) -> dict:
+    from app.services.trading_bot.instances import ExecutionNotAllowed
+
+    try:
+        return {"ok": True, **(await _bots_manager().start_instance(bot_id))}
+    except KeyError:
+        raise HTTPException(404, "Bot not found")
+    except ExecutionNotAllowed as exc:
+        raise HTTPException(400, str(exc))
+
+
+@router.post("/bots/instances/{bot_id}/stop")
+async def bot_instances_stop(bot_id: str) -> dict:
+    try:
+        return {"ok": True, **(await _bots_manager().stop_instance(bot_id))}
+    except KeyError:
+        raise HTTPException(404, "Bot not found")
+
+
+@router.get("/bots/instances/{bot_id}/signals")
+async def bot_instances_signals(bot_id: str) -> dict:
+    from app.services.trading_bot.instances import DEFAULT_BOT_ID, get_instance
+    from app.services.trading_bot.store import list_signals_for_bot
+
+    if await get_instance(bot_id) is None:
+        raise HTTPException(404, "Bot not found")
+    signals = await list_signals_for_bot(bot_id, 50, include_untagged=bot_id == DEFAULT_BOT_ID)
+    return {"signals": signals}
 
 
 @router.get("/lab/leaderboard")

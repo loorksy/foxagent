@@ -100,6 +100,8 @@ async def _signal_items() -> list[dict[str, Any]]:
         status = str(sig.get("status") or "")
         if status not in OPEN_SIGNAL:
             continue
+        if str((sig.get("metadata") or {}).get("mode") or sig.get("mode") or "") == "alert":
+            continue  # alerts-bot signals are notification-only, never approvals
         sid = str(sig.get("id") or "")
         side = str(sig.get("signalType") or "").upper()
         title = f"{sig.get('strategyId') or 'signal'} · {side}"
@@ -343,6 +345,8 @@ async def approve_signal(item_id: str) -> dict[str, Any]:
     signal = await get_signal(sid)
     if signal is None:
         return {"ok": False, "detail": "Signal not found"}
+    if str((signal.get("metadata") or {}).get("mode") or signal.get("mode") or "") == "alert":
+        return {"ok": False, "detail": "إشارة تنبيه فقط — لا تدخل قائمة الموافقات"}
     if str(signal.get("status") or "") not in OPEN_SIGNAL | {"pending"}:
         return {"ok": False, "detail": f"Signal is {signal.get('status')}, not staged"}
     try:
@@ -351,6 +355,14 @@ async def approve_signal(item_id: str) -> dict[str, Any]:
         return {"ok": False, "detail": str(exc), "reasons": (exc.result or {}).get("reasons") or []}
     if result.get("ok"):
         result["itemId"] = f"signal:{sid}"
+        try:
+            from app.services.trading_bot.instances import execute_signal_order
+
+            order = await execute_signal_order(sid, trigger="approval")
+            if order is not None:
+                result["order"] = order
+        except Exception:
+            result.setdefault("order", None)
     return result
 
 

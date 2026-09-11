@@ -40,6 +40,8 @@ def _signal_dict(row: BotSignalRow | dict[str, Any]) -> dict[str, Any]:
         "economicEventId": row.economic_event_id,
         "pnl": row.pnl,
         "recommendationId": row.recommendation_id,
+        "botId": str(extra.get("botId") or ""),
+        "mode": str(extra.get("mode") or "signal"),
         "metadata": extra,
         "createdAt": row.created_at.isoformat() if row.created_at else None,
         "closedAt": row.closed_at.isoformat() if row.closed_at else None,
@@ -90,6 +92,13 @@ async def save_signal(payload: dict[str, Any]) -> dict[str, Any]:
     payload.setdefault("id", new_id("sig"))
     payload.setdefault("instrument", "XAU_USD")
     payload.setdefault("status", "pending")
+    # botId/mode ride inside metadata so the SQL schema stays unchanged.
+    metadata = dict(payload.get("metadata") or {})
+    if payload.get("botId"):
+        metadata.setdefault("botId", str(payload["botId"]))
+    if payload.get("mode"):
+        metadata.setdefault("mode", str(payload["mode"]))
+    payload["metadata"] = metadata
     if SessionLocal is None:
         _memory_signals[payload["id"]] = payload
         return payload
@@ -133,6 +142,19 @@ async def list_signals(limit: int = 50) -> list[dict[str, Any]]:
     async with SessionLocal() as session:
         result = await session.execute(select(BotSignalRow).order_by(BotSignalRow.created_at.desc()).limit(limit))
         return [_signal_dict(row) for row in result.scalars()]
+
+
+async def list_signals_for_bot(bot_id: str, limit: int = 50, *, include_untagged: bool = False) -> list[dict[str, Any]]:
+    """Signals produced by one bot instance. include_untagged keeps the default
+    desk bot's history from before botId tagging existed."""
+    out: list[dict[str, Any]] = []
+    for row in await list_signals(300):
+        rid = str(row.get("botId") or (row.get("metadata") or {}).get("botId") or "")
+        if rid == bot_id or (include_untagged and not rid):
+            out.append(row)
+        if len(out) >= limit:
+            break
+    return out
 
 
 async def get_signal(signal_id: str) -> dict[str, Any] | None:

@@ -55,6 +55,13 @@ export function SettingsPanel() {
   const setLocale = useLocale((s) => s.setLocale);
   const t = useT();
   const [probe, setProbe] = useState<{ ready?: boolean; configured?: boolean; keyValid?: boolean; detail?: string }>({});
+  const [mt5, setMt5] = useState<{
+    connected?: boolean;
+    configured?: boolean;
+    balance?: number | null;
+    currency?: string;
+    detail?: string;
+  }>({});
   const [paused, setPaused] = useState(false);
   const models = useCatalog((s) => s.models);
 
@@ -76,7 +83,30 @@ export function SettingsPanel() {
       .systemStatus()
       .then((s) => setPaused(Boolean(s.paused)))
       .catch(() => undefined);
+    void api
+      .mt5Status()
+      .then((s) => setMt5(s))
+      .catch(() => undefined);
   }, [load]);
+
+  const verifyMt5 = async () => {
+    try {
+      const res = await api.validateSettings({
+        target: "metaapi",
+        metaapiToken: form.metaapiToken || "",
+        metaapiAccountId: form.metaapiAccountId || "",
+      });
+      setMt5({
+        connected: Boolean(res.connected),
+        configured: res.configured ?? true,
+        balance: res.balance,
+        currency: res.currency,
+        detail: res.detail,
+      });
+    } catch {
+      setMt5({ connected: false, configured: true, detail: "request failed" });
+    }
+  };
 
   return (
     <div className="fox-scroll mx-auto w-full max-w-xl flex-1 overflow-y-auto px-4 py-6">
@@ -178,6 +208,37 @@ export function SettingsPanel() {
         </section>
 
         <section className="space-y-3 rounded-xl border border-border bg-card p-4">
+          <div>
+            <h2 className="text-sm font-semibold">{t("settings.mt5")}</h2>
+            <p className="text-xs text-muted-foreground">{t("settings.mt5Help")}</p>
+          </div>
+          <Field
+            label="METAAPI_TOKEN"
+            secret
+            value={form.metaapiToken || ""}
+            onChange={(metaapiToken) => patchForm({ metaapiToken })}
+            placeholder={pub?.metaapiTokenSet ? t("settings.secretPlaceholder") : "eyJhbGci..."}
+          />
+          <Field
+            label="METAAPI_ACCOUNT_ID"
+            value={form.metaapiAccountId || ""}
+            onChange={(metaapiAccountId) => patchForm({ metaapiAccountId })}
+            placeholder="865d3a4d-..."
+          />
+          <button type="button" onClick={() => void verifyMt5()} className="text-[12px] text-info hover:underline">
+            {t("settings.mt5Verify")}
+          </button>
+          <p className={cn("text-[12px]", mt5.connected ? "text-buy" : "text-muted-foreground")}>
+            {mt5.configured === false
+              ? t("settings.mt5NotConfigured")
+              : mt5.connected
+                ? t("settings.mt5Connected", { balance: mt5.balance ?? "—", currency: mt5.currency ?? "" })
+                : t("settings.mt5Disconnected")}
+            {!mt5.connected && mt5.configured !== false && mt5.detail ? ` — ${mt5.detail}` : ""}
+          </p>
+        </section>
+
+        <section className="space-y-3 rounded-xl border border-border bg-card p-4">
           <h2 className="text-sm font-semibold">{t("settings.risk")}</h2>
           <div className="grid grid-cols-2 gap-3">
             <label className="space-y-1.5">
@@ -237,6 +298,15 @@ export function SettingsPanel() {
             >
               <span className={cn("absolute top-0.5 size-5 rounded-full bg-background transition", form.enableTelegramNotifications ? "start-5" : "start-0.5")} />
             </button>
+          </div>
+          <div className="space-y-1 text-xs text-muted-foreground">
+            <p className="font-medium">{t("settings.telegramWhatTitle")}</p>
+            <ul className="list-disc space-y-0.5 ps-4">
+              <li>{t("settings.telegramWhat1")}</li>
+              <li>{t("settings.telegramWhat2")}</li>
+              <li>{t("settings.telegramWhat3")}</li>
+              <li>{t("settings.telegramWhat4")}</li>
+            </ul>
           </div>
           <Field
             label="TELEGRAM_BOT_TOKEN"

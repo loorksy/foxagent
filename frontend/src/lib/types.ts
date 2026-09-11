@@ -59,6 +59,13 @@ export type TradeRecommendation = {
   model?: string | null;
   visionNotes?: string | null;
   focusTimestamp?: number | null;
+  analysis?: {
+    technical?: string;
+    fundamental?: string;
+    bull?: string;
+    bear?: string;
+    risk?: string;
+  } | null;
 };
 
 export type KLineBar = {
@@ -94,6 +101,8 @@ export type StrategyRule = {
   entry_conditions: Record<string, unknown>;
   sessions?: string[];
   dsl?: Record<string, unknown>;
+  kind?: "dsl" | "python";
+  code?: string;
   pinned?: boolean;
   stop_rule: string;
   tp1_r: number;
@@ -210,6 +219,20 @@ export type RunThought = {
   channel?: string;
 };
 
+export type RunStep = {
+  kind: "thought" | "tool" | "debate" | "recall" | "intent";
+  agent?: string;
+  text?: string;
+  channel?: string;
+  toolId?: string;
+  toolName?: string;
+  toolInput?: unknown;
+  toolOutput?: unknown;
+  role?: string;
+  intent?: string;
+  at: number;
+};
+
 export type RunTool = {
   id: string;
   agent: string;
@@ -292,6 +315,9 @@ export type SettingsPublic = {
   telegramChatId: string;
   enableTelegramNotifications: boolean;
   telegramConfigured: boolean;
+  metaapiTokenSet?: boolean;
+  metaapiAccountId?: string;
+  metaapiConfigured?: boolean;
   botEnabled?: boolean;
   botScanInterval?: number;
   botAgents?: string[];
@@ -315,6 +341,8 @@ export type SettingsPayload = {
   telegramBotToken: string;
   telegramChatId: string;
   enableTelegramNotifications: boolean;
+  metaapiToken?: string;
+  metaapiAccountId?: string;
   botEnabled?: boolean;
   botScanInterval?: number;
   botAgents?: string[];
@@ -366,6 +394,46 @@ export type BotStatus = {
   uptimeSeconds?: number;
   signalsToday?: number;
   lastError?: string;
+};
+
+export type BotInstanceType = "strategy" | "quant" | "alerts" | "execution";
+
+export type BotInstanceStats = {
+  cycles: number;
+  lastError: string;
+  lastSignalAt: string | null;
+};
+
+export type BotInstance = {
+  id: string;
+  name: string;
+  type: BotInstanceType;
+  enabled: boolean;
+  scanIntervalSeconds: number;
+  agents: string[];
+  strategyIds: string[];
+  minRr: number;
+  maxRiskPercent: number;
+  allowedSessions: string[];
+  autoExecute: boolean;
+  orderVolume: number;
+  createdAt: string;
+  stats: BotInstanceStats;
+  isDefault?: boolean;
+  running?: boolean;
+};
+
+export type BotInstanceCreatePayload = {
+  name: string;
+  type: BotInstanceType;
+  scanIntervalSeconds: number;
+  agents?: string[];
+  strategyIds?: string[];
+  minRr?: number;
+  maxRiskPercent?: number;
+  allowedSessions?: string[];
+  autoExecute?: boolean;
+  orderVolume?: number;
 };
 
 export type BacktestTrade = {

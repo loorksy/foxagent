@@ -5,6 +5,9 @@ import { useBacktest } from "@/stores/backtest";
 import { useStrategyLab } from "@/stores/strategyLab";
 import { useT, type MessageKey } from "@/i18n";
 
+const FIELD_CLASS =
+  "mt-1 w-full rounded-lg border border-border bg-input px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring";
+
 export function BacktestForm() {
   const run = useBacktest((s) => s.run);
   const running = useBacktest((s) => s.running);
@@ -32,7 +35,7 @@ export function BacktestForm() {
 
   return (
     <form
-      className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-4"
+      className="flex flex-wrap items-end gap-2 rounded-xl border border-border bg-card p-3"
       onSubmit={(e) => {
         e.preventDefault();
         void run({
@@ -43,25 +46,17 @@ export function BacktestForm() {
         });
       }}
     >
-      <label className="text-xs text-muted-foreground">
+      <label className="min-w-[6.5rem] flex-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:flex-none">
         {t("backtest.timeframe")}
-        <select
-          className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 text-sm"
-          value={timeframe}
-          onChange={(e) => setTimeframe(e.target.value)}
-        >
+        <select className={FIELD_CLASS} value={timeframe} onChange={(e) => setTimeframe(e.target.value)}>
           <option value="M15">M15</option>
           <option value="H1">H1</option>
           <option value="H4">H4</option>
         </select>
       </label>
-      <label className="text-xs text-muted-foreground">
+      <label className="min-w-[11rem] flex-[2] text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:flex-none">
         {t("backtest.strategy")}
-        <select
-          className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 text-sm"
-          value={strategyId}
-          onChange={(e) => setStrategyId(e.target.value)}
-        >
+        <select className={FIELD_CLASS} value={strategyId} onChange={(e) => setStrategyId(e.target.value)}>
           <option value="">{t("backtest.allStrategies")}</option>
           {options.map((rule) => (
             <option key={rule.id} value={rule.id}>
@@ -70,16 +65,12 @@ export function BacktestForm() {
           ))}
         </select>
       </label>
-      <label className="text-xs text-muted-foreground">
+      <label className="min-w-[6.5rem] flex-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:flex-none">
         {t("backtest.days")}
-        <select
-          className="mt-1 w-full rounded-lg border border-border bg-input px-3 py-2 text-sm"
-          value={days}
-          onChange={(e) => setDays(Number(e.target.value))}
-        >
+        <select className={FIELD_CLASS} value={days} onChange={(e) => setDays(Number(e.target.value))}>
           {[90, 180, 365, 730].map((n) => (
             <option key={n} value={n}>
-              {n}
+              {t("backtest.daysUnit", { n })}
             </option>
           ))}
         </select>
@@ -87,7 +78,7 @@ export function BacktestForm() {
       <button
         type="submit"
         disabled={running}
-        className="self-end rounded-lg border border-border py-2 text-sm font-semibold disabled:opacity-50"
+        className="ms-auto h-[34px] rounded-lg bg-foreground px-5 text-sm font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-50"
       >
         {running ? t("backtest.running") : t("backtest.run")}
       </button>

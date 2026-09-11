@@ -259,5 +259,6 @@ def test_frontend_consumes_draw_on_chart_overlays():
     assert 'type: "append"' in workspace
     assert "appendToChart:" in workspace
     assert 'command.type === "append"' in canvas
-    assert "applyOverlays(chart, command.overlays" in canvas
+    # Overlays are now drawn through the animated agent-cursor path.
+    assert "draw(chart, command.overlays" in canvas
     assert "export async function applyOverlays" in overlays

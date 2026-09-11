@@ -7,6 +7,7 @@ import type {
   ChatMessage,
   DebateLine,
   MemoryRecall,
+  RunStep,
   RunThought,
   RunTool,
   StrategyExperimentJob,
@@ -25,6 +26,10 @@ type ChatState = {
   thoughts: RunThought[];
   tools: RunTool[];
   debate: DebateLine[];
+  steps: RunStep[];
+  runStartedAt: number | null;
+  runEndedAt: number | null;
+  runIntent: string | null;
   artifacts: Artifact[];
   recalls: MemoryRecall[];
   artifactsOpen: boolean;
@@ -51,6 +56,7 @@ type ChatState = {
   upsertToolResult: (id: string, output: unknown) => void;
   addDebate: (line: DebateLine) => void;
   addRecall: (recall: MemoryRecall) => void;
+  setIntent: (intent: string) => void;
   startArtifact: (artifact: Artifact) => void;
   appendArtifact: (id: string, text: string) => void;
   endArtifact: (artifact: Artifact) => void;
@@ -110,6 +116,10 @@ export const useChat = create<ChatState>((set) => ({
   thoughts: [],
   tools: [],
   debate: [],
+  steps: [],
+  runStartedAt: null,
+  runEndedAt: null,
+  runIntent: null,
   artifacts: [],
   recalls: [],
   artifactsOpen: false,
@@ -139,7 +149,11 @@ export const useChat = create<ChatState>((set) => ({
       thoughts: [],
       tools: [],
       debate: [],
+      steps: [],
       recalls: [],
+      runStartedAt: Date.now(),
+      runEndedAt: null,
+      runIntent: null,
       messages: [
         ...s.messages,
         { id: uid("ast"), role: "assistant", text: "", createdAt: Date.now(), streaming: true },
@@ -200,29 +214,64 @@ export const useChat = create<ChatState>((set) => ({
     }),
   appendThought: (agent, text, channel) =>
     set((s) => {
-      const last = s.thoughts[s.thoughts.length - 1];
-      if (last && last.agent === agent && last.channel === channel) {
-        const merged = { ...last, text: (last.text + text).slice(-12000) };
-        return { thoughts: [...s.thoughts.slice(0, -1), merged] };
-      }
-      return { thoughts: [...s.thoughts, { agent, text, channel }] };
+      const lastThought = s.thoughts[s.thoughts.length - 1];
+      const thoughts =
+        lastThought && lastThought.agent === agent && lastThought.channel === channel
+          ? [...s.thoughts.slice(0, -1), { ...lastThought, text: (lastThought.text + text).slice(-12000) }]
+          : [...s.thoughts, { agent, text, channel }];
+      const lastStep = s.steps[s.steps.length - 1];
+      const steps =
+        lastStep && lastStep.kind === "thought" && lastStep.agent === agent && lastStep.channel === channel
+          ? [...s.steps.slice(0, -1), { ...lastStep, text: ((lastStep.text || "") + text).slice(-12000) }]
+          : [...s.steps, { kind: "thought" as const, agent, text, channel, at: Date.now() }];
+      return { thoughts, steps };
     }),
   upsertToolCall: (tool) =>
     set((s) => {
       const idx = s.tools.findIndex((t) => t.id && t.id === tool.id);
-      if (idx >= 0) {
-        const tools = s.tools.slice();
-        tools[idx] = { ...tools[idx], ...tool };
-        return { tools };
-      }
-      return { tools: [...s.tools, tool] };
+      const tools = idx >= 0 ? s.tools.map((t, i) => (i === idx ? { ...t, ...tool } : t)) : [...s.tools, tool];
+      const stepIdx = s.steps.findIndex((st) => st.kind === "tool" && st.toolId === tool.id);
+      const steps =
+        stepIdx >= 0
+          ? s.steps.map((st, i) =>
+              i === stepIdx ? { ...st, toolName: tool.name, toolInput: tool.input, agent: tool.agent } : st
+            )
+          : [
+              ...s.steps,
+              {
+                kind: "tool" as const,
+                agent: tool.agent,
+                toolId: tool.id,
+                toolName: tool.name,
+                toolInput: tool.input,
+                at: Date.now(),
+              },
+            ];
+      return { tools, steps };
     }),
   upsertToolResult: (id, output) =>
     set((s) => ({
       tools: s.tools.map((t) => (t.id === id ? { ...t, output } : t)),
+      steps: s.steps.map((st) => (st.kind === "tool" && st.toolId === id ? { ...st, toolOutput: output } : st)),
     })),
-  addDebate: (line) => set((s) => ({ debate: [...s.debate, line] })),
-  addRecall: (recall) => set((s) => ({ recalls: [...s.recalls, recall] })),
+  addDebate: (line) =>
+    set((s) => ({
+      debate: [...s.debate, line],
+      steps: [...s.steps, { kind: "debate" as const, agent: line.agent, role: line.role, text: line.text, at: Date.now() }],
+    })),
+  addRecall: (recall) =>
+    set((s) => ({
+      recalls: [...s.recalls, recall],
+      steps: [
+        ...s.steps,
+        { kind: "recall" as const, text: recall.text || (recall.lessons || []).join("\n"), at: Date.now() },
+      ],
+    })),
+  setIntent: (intent) =>
+    set((s) => ({
+      runIntent: intent,
+      steps: [...s.steps, { kind: "intent" as const, intent, at: Date.now() }],
+    })),
   startArtifact: (artifact) =>
     set((s) => ({
       artifacts: [...s.artifacts.filter((a) => a.id !== artifact.id), artifact],
@@ -251,6 +300,7 @@ export const useChat = create<ChatState>((set) => ({
   complete: () =>
     set((s) => ({
       streaming: false,
+      runEndedAt: s.streaming ? Date.now() : s.runEndedAt,
       sessionUsage: s.streaming ? addUsage(s.sessionUsage, s.runUsage) : s.sessionUsage,
       messages: s.messages.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
     })),
@@ -258,11 +308,45 @@ export const useChat = create<ChatState>((set) => ({
     const state = session.state || {};
     const messages = asMessages(state.messages);
     const sessionUsage = messages.reduce<TokenUsage | null>((acc, m) => (m.usage ? addUsage(acc, m.usage) : acc), null);
+    const steps: RunStep[] = [
+      ...(state.recalls || []).map((r) => ({
+        kind: "recall" as const,
+        text: r.text || (r.lessons || []).join("\n"),
+        at: 0,
+      })),
+      ...(state.thoughts || []).map((th) => ({
+        kind: "thought" as const,
+        agent: th.agent,
+        text: th.text,
+        channel: th.channel,
+        at: 0,
+      })),
+      ...(state.tools || []).map((tool) => ({
+        kind: "tool" as const,
+        agent: tool.agent,
+        toolId: tool.id,
+        toolName: tool.name,
+        toolInput: tool.input,
+        toolOutput: tool.output,
+        at: 0,
+      })),
+      ...(state.debate || []).map((d) => ({
+        kind: "debate" as const,
+        agent: d.agent,
+        role: d.role,
+        text: d.text,
+        at: 0,
+      })),
+    ];
     set({
       messages,
       thoughts: state.thoughts || [],
       tools: state.tools || [],
       debate: state.debate || [],
+      steps,
+      runStartedAt: null,
+      runEndedAt: null,
+      runIntent: null,
       artifacts: state.artifacts || [],
       recalls: state.recalls || [],
       streaming: false,
@@ -280,6 +364,10 @@ export const useChat = create<ChatState>((set) => ({
       thoughts: [],
       tools: [],
       debate: [],
+      steps: [],
+      runStartedAt: null,
+      runEndedAt: null,
+      runIntent: null,
       artifacts: [],
       recalls: [],
       runId: null,

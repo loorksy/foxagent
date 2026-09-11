@@ -6,6 +6,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { Sidebar } from "./shell/Sidebar";
 import { TopBar } from "./shell/TopBar";
 import { ChatPanel } from "./chat/ChatPanel";
+import { RecommendationDetails } from "./chat/RecommendationDetails";
 import { RecommendationsPage } from "./recs/RecommendationsPage";
 import { SettingsPanel } from "./settings/SettingsPanel";
 import { MemoryPage } from "./memory/MemoryPage";
@@ -28,6 +29,7 @@ export function DeskLayout({ children }: { children?: React.ReactNode }) {
   const search = useSearchParams();
   const app = search.get("app");
   const highlight = search.get("highlight");
+  const recDetailsId = app === "recDetails" ? search.get("rec") : null;
   const chartOpen = useWorkspace((s) => s.chartOpen);
   const setChartOpen = useWorkspace((s) => s.setChartOpen);
   const setPrice = useWorkspace((s) => s.setPrice);
@@ -169,12 +171,25 @@ export function DeskLayout({ children }: { children?: React.ReactNode }) {
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 {children || <ChatPanel />}
               </div>
-              {chartOpen && (
+              {recDetailsId && (
+                <div className="hidden min-h-0 w-[min(46%,34rem)] shrink-0 border-s border-border bg-background xl:block">
+                  <RecommendationDetails recId={recDetailsId} />
+                </div>
+              )}
+              {recDetailsId && (
+                <div className="xl:hidden">
+                  <div className="absolute inset-0 z-30 bg-black/50" aria-hidden />
+                  <div className="absolute inset-x-0 bottom-0 z-40 h-[80dvh] overflow-hidden rounded-t-2xl border-t border-border bg-background shadow-xl">
+                    <RecommendationDetails recId={recDetailsId} />
+                  </div>
+                </div>
+              )}
+              {chartOpen && !recDetailsId && (
                 <div className="hidden min-h-0 w-[min(52%,40rem)] shrink-0 border-s border-border xl:block">
                   <ChartCanvas className="h-full w-full" />
                 </div>
               )}
-              {chartOpen && (
+              {chartOpen && !recDetailsId && (
                 <div className="xl:hidden">
                   <button type="button" className="absolute inset-0 z-30 bg-black/50" aria-label={t("workstation.closeChart")} onClick={() => setChartOpen(false)} />
                   <div className="absolute inset-x-0 bottom-0 z-40 h-[72dvh] overflow-hidden rounded-t-2xl border-t border-border bg-background shadow-xl">

@@ -13,7 +13,7 @@ type SettingsState = {
   patchForm: (patch: Partial<SettingsPayload>) => void;
   load: () => Promise<void>;
   save: () => Promise<void>;
-  validate: (target: "anthropic" | "oanda" | "telegram") => Promise<void>;
+  validate: (target: "anthropic" | "oanda" | "telegram" | "metaapi") => Promise<void>;
 };
 
 const emptyForm: SettingsPayload = {
@@ -28,6 +28,8 @@ const emptyForm: SettingsPayload = {
   telegramBotToken: "",
   telegramChatId: "",
   enableTelegramNotifications: false,
+  metaapiToken: "",
+  metaapiAccountId: "",
   botEnabled: false,
   botScanInterval: 60,
   botAgents: ["multi_strategy", "pattern_notes", "news_candle"],
@@ -62,6 +64,7 @@ export const useSettings = create<SettingsState>((set, get) => ({
         allowedSessions: pub.allowedSessions,
         telegramChatId: pub.telegramChatId || "",
         enableTelegramNotifications: Boolean(pub.enableTelegramNotifications),
+        metaapiAccountId: pub.metaapiAccountId || "",
         botEnabled: Boolean(pub.botEnabled),
         botScanInterval: pub.botScanInterval || 60,
         botAgents: pub.botAgents || s.form.botAgents,
@@ -86,6 +89,8 @@ export const useSettings = create<SettingsState>((set, get) => ({
       oandaEnvironment: form.oandaEnvironment,
       telegramBotToken: form.telegramBotToken,
       telegramChatId: form.telegramChatId,
+      metaapiToken: form.metaapiToken,
+      metaapiAccountId: form.metaapiAccountId,
     });
     set({ status: res.detail });
   },

@@ -192,6 +192,8 @@ class StrategyLibrary:
             data["status"] = "active" if data["pinned"] else "archived"
         if not data.get("sessions"):
             data["sessions"] = list(SESSIONS)
+        if data.get("kind") == "python":
+            return StrategyRule.model_validate(data)
         if not data.get("dsl"):
             data["dsl"] = dsl_from_flags(data.get("entry_conditions") or {}, data.get("sessions"))
         elif not data.get("entry_conditions"):
@@ -235,6 +237,14 @@ class StrategyLibrary:
         tfs = sanitize_timeframes(payload.get("timeframes") or payload.get("timeframe"))
         sessions = sanitize_sessions(payload.get("sessions"))
         conds = dict(payload.get("entry_conditions") or flags_from_dsl(payload.get("dsl")))
+        kind = "python" if str(payload.get("kind") or "dsl") == "python" else "dsl"
+        code = str(payload.get("code") or "")
+        if kind == "python":
+            from app.services.trading_bot.code_runner import lint_code
+
+            lint = lint_code(code)
+            if not lint.get("ok"):
+                return {"ok": False, "detail": f"Code rejected: {lint.get('error')}"}
         rule = StrategyRule(
             id=sid,
             name=name,
@@ -243,7 +253,9 @@ class StrategyLibrary:
             direction=payload.get("direction") or "both",  # type: ignore[arg-type]
             entry_conditions=conds,
             sessions=sessions,
-            dsl=payload.get("dsl") or dsl_from_flags(conds, sessions),
+            dsl=payload.get("dsl") or ({} if kind == "python" else dsl_from_flags(conds, sessions)),
+            kind=kind,
+            code=code,
             pinned=False,
             stop_rule=str(payload.get("stop_rule") or "swing ± ATR"),
             tp1_r=float(payload.get("tp1_r") or 1.5),
@@ -357,9 +369,15 @@ class StrategyLibrary:
         if rule.status not in {"draft", "experimenting"}:
             return {"ok": False, "detail": "Only drafts can be edited"}
         data = rule.model_dump()
-        for key in ("name", "description", "direction", "stop_rule", "tp1_r", "tp2_r", "max_holding_bars", "entry_conditions", "sessions", "dsl"):
+        for key in ("name", "description", "direction", "stop_rule", "tp1_r", "tp2_r", "max_holding_bars", "entry_conditions", "sessions", "dsl", "kind", "code"):
             if key in payload:
                 data[key] = payload[key]
+        if data.get("kind") == "python":
+            from app.services.trading_bot.code_runner import lint_code
+
+            lint = lint_code(str(data.get("code") or ""))
+            if not lint.get("ok"):
+                return {"ok": False, "detail": f"Code rejected: {lint.get('error')}"}
         if "sessions" in payload:
             data["sessions"] = sanitize_sessions(payload.get("sessions"))
         if "entry_conditions" in payload and "dsl" not in payload:

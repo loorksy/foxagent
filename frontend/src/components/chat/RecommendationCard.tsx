@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CandlestickChart, Check, Copy, Shield, Target, TrendingDown, TrendingUp } from "lucide-react";
+import { CandlestickChart, Check, Copy, FileText, Shield, Target, TrendingDown, TrendingUp } from "lucide-react";
 import type { TradeRecommendation } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import { useWorkspace } from "@/stores/workspace";
@@ -73,6 +73,17 @@ export function RecommendationCard({ rec }: { rec: TradeRecommendation }) {
             >
               <CandlestickChart className="h-3 w-3" />
               {t("rec.showOnChart")}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const base = activeId ? `/agents/${activeId}` : window.location.pathname;
+                router.push(`${base}?app=recDetails&rec=${rec.id}`, { scroll: false });
+              }}
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-[11px] text-foreground hover:bg-muted"
+            >
+              <FileText className="h-3 w-3" />
+              {t("rec.details")}
             </button>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2">

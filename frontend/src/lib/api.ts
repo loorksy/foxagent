@@ -70,7 +70,29 @@ export const api = {
   saveSettings: (body: SettingsPayload) =>
     http<SettingsPublic>("/api/settings", { method: "PUT", body: JSON.stringify(body) }),
   validateSettings: (body: Record<string, unknown>) =>
-    http<{ ok: boolean; detail: string; keyValid?: boolean }>("/api/settings/validate", { method: "POST", body: JSON.stringify(body) }),
+    http<{
+      ok: boolean;
+      detail: string;
+      keyValid?: boolean;
+      connected?: boolean;
+      configured?: boolean;
+      balance?: number | null;
+      currency?: string;
+    }>(
+      "/api/settings/validate",
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+  mt5Status: () =>
+    http<{
+      connected: boolean;
+      configured?: boolean;
+      state?: string;
+      accountName?: string;
+      balance?: number | null;
+      equity?: number | null;
+      currency?: string;
+      detail?: string;
+    }>("/api/mt5/status"),
   prices: () => http<{ prices: import("./types").LivePrice[] }>("/api/prices"),
   sessions: () => http<{ sessions: AgentSession[] }>("/api/sessions"),
   createSession: (body?: { id?: string; symbol?: string; timeframe?: string; title?: string }) =>
@@ -164,6 +186,11 @@ export const api = {
       body: JSON.stringify(body),
     }),
   deleteStrategy: (id: string) => http<{ ok: boolean; deleted?: string }>(`/api/strategies/${id}`, { method: "DELETE" }),
+  lintStrategyCode: (code: string) =>
+    http<{ ok: boolean; error?: string | null }>("/api/strategies/lint-code", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
   validateStrategy: (id: string, body?: Record<string, unknown>) =>
     http<import("./types").StrategyValidation>(`/api/strategies/${id}/validate`, {
       method: "POST",
@@ -179,6 +206,29 @@ export const api = {
   pinStrategy: (id: string) => http<{ ok: boolean; strategy?: import("./types").StrategyRule }>(`/api/strategies/${id}/pin`, { method: "POST" }),
   unpinStrategy: (id: string) =>
     http<{ ok: boolean; strategy?: import("./types").StrategyRule }>(`/api/strategies/${id}/unpin`, { method: "POST" }),
+  botInstances: () => http<{ instances: import("./types").BotInstance[]; paused: boolean }>("/api/bots/instances"),
+  createBotInstance: (body: import("./types").BotInstanceCreatePayload) =>
+    http<import("./types").BotInstance & { ok?: boolean }>("/api/bots/instances", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  patchBotInstance: (id: string, body: Record<string, unknown>) =>
+    http<import("./types").BotInstance & { ok?: boolean }>(`/api/bots/instances/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteBotInstance: (id: string) =>
+    http<{ ok: boolean; deleted?: string }>(`/api/bots/instances/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  startBotInstance: (id: string) =>
+    http<import("./types").BotInstance & { ok?: boolean }>(`/api/bots/instances/${encodeURIComponent(id)}/start`, {
+      method: "POST",
+    }),
+  stopBotInstance: (id: string) =>
+    http<import("./types").BotInstance & { ok?: boolean }>(`/api/bots/instances/${encodeURIComponent(id)}/stop`, {
+      method: "POST",
+    }),
+  botInstanceSignals: (id: string) =>
+    http<{ signals: import("./types").BotSignal[] }>(`/api/bots/instances/${encodeURIComponent(id)}/signals`),
   botsRoom: () => http<Record<string, unknown>>("/api/bots"),
   botsNews: () => http<{ open: boolean; windows: Array<Record<string, unknown>> }>("/api/bots/news"),
   botScans: () => http<{ scans: Array<Record<string, unknown>> }>("/api/bot/scans"),
