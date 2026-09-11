@@ -43,6 +43,13 @@ async def lifespan(app: FastAPI):
     import os
 
     autostart = os.environ.get("FOXAGENT_BOT_AUTOSTART", "1").strip().lower() not in {"0", "false", "off", "no"}
+    from app.services.trading_bot.instances import get_manager
+
+    manager = get_manager()
+    try:
+        await manager.ensure_default()
+    except Exception as exc:
+        logger.warning("Bot instance migration skipped: %s", exc)
     if autostart:
         try:
             runtime = await load_runtime_settings()
@@ -50,9 +57,15 @@ async def lifespan(app: FastAPI):
                 await bot.start()
         except Exception as exc:
             logger.warning("Gold bot autostart skipped: %s", exc)
+        try:
+            if not await is_paused_safe():
+                await manager.start_enabled()
+        except Exception as exc:
+            logger.warning("Bot instances autostart skipped: %s", exc)
     ops = asyncio.create_task(_ops_loop())
     yield
     await bot.stop()
+    await manager.stop_all()
     pump.cancel()
     reflector.cancel()
     warehouse.cancel()

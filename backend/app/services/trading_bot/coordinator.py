@@ -26,6 +26,9 @@ class TradingBotCoordinator:
         self.multi_strategy_agent = MultiStrategyAgent()
         self.pattern_notes_agent = PatternNotesAgent()
         self.news_candle_agent = NewsCandleAgent()
+        # Optional BotInstance: when set, its config (agents/strategies/limits)
+        # drives the cycle instead of the global runtime settings.
+        self.instance: Any | None = None
         self.is_running = False
         self.monitor_task: asyncio.Task | None = None
         self.started_at: float | None = None
@@ -110,8 +113,12 @@ class TradingBotCoordinator:
 
     async def run_cycle(self, runtime: Any | None = None) -> list[dict[str, Any]]:
         runtime = runtime or await self._settings()
-        agents = set(getattr(runtime, "botAgents", None) or ["multi_strategy", "pattern_notes", "news_candle"])
-        active = list(getattr(runtime, "botActiveStrategies", None) or [])
+        if self.instance is not None:
+            agents = set(self.instance.agents or ["multi_strategy"])
+            active = list(self.instance.strategyIds or [])
+        else:
+            agents = set(getattr(runtime, "botAgents", None) or ["multi_strategy", "pattern_notes", "news_candle"])
+            active = list(getattr(runtime, "botActiveStrategies", None) or [])
         saved: list[dict[str, Any]] = []
         rejected = 0
         from app.services.run_control import is_paused
@@ -133,12 +140,17 @@ class TradingBotCoordinator:
             from app.services.trading_bot.strategy_schema import BUILTIN_IDS
 
             lib_active = await get_library().get_active_strategies()
-            settings_ids = set(active or BUILTIN_IDS)
-            scan_ids = [
-                r.id
-                for r in lib_active
-                if (r.id in BUILTIN_IDS and r.id in settings_ids) or r.id not in BUILTIN_IDS
-            ]
+            if self.instance is not None and active:
+                # Per-instance cycle scans exactly the instance's strategies.
+                wanted = set(active)
+                scan_ids = [r.id for r in lib_active if r.id in wanted]
+            else:
+                settings_ids = set(active or BUILTIN_IDS)
+                scan_ids = [
+                    r.id
+                    for r in lib_active
+                    if (r.id in BUILTIN_IDS and r.id in settings_ids) or r.id not in BUILTIN_IDS
+                ]
             self.multi_strategy_agent.active = scan_ids
             for signal in await self.multi_strategy_agent.scan_xau_usd():
                 kept = await self._accept(signal, runtime)
@@ -163,13 +175,18 @@ class TradingBotCoordinator:
 
     async def _bot_limits(self, signal: dict[str, Any], runtime: Any) -> bool:
         """Extra bot caps — may only tighten the sacred risk gate, never loosen it."""
+        inst = self.instance
+        min_rr = float(inst.minRr) if inst is not None else float(getattr(runtime, "botMinRr", 2.0) or 2.0)
+        max_risk = (
+            float(inst.maxRiskPercent) if inst is not None else float(getattr(runtime, "botMaxRiskPercent", 1.0) or 1.0)
+        )
         rr = float(signal.get("riskReward") or 0)
-        if rr < float(getattr(runtime, "botMinRr", 2.0) or 2.0):
+        if rr < min_rr:
             return False
         risk_pct = implied_risk_percent(float(signal.get("entryPrice") or 0), float(signal.get("stopLoss") or 0))
-        if risk_pct > float(getattr(runtime, "botMaxRiskPercent", 1.0) or 1.0):
+        if risk_pct > max_risk:
             return False
-        allowed = list(getattr(runtime, "botAllowedSessions", None) or [])
+        allowed = list(inst.allowedSessions) if inst is not None else list(getattr(runtime, "botAllowedSessions", None) or [])
         if allowed:
             session = current_session()
             if not _session_allowed(str(session.get("session") or ""), allowed):
@@ -192,13 +209,44 @@ class TradingBotCoordinator:
         if not await self._bot_limits(signal, runtime):
             logger.info("Bot signal rejected by bot risk limits")
             return None
+        inst = self.instance
+        if inst is not None:
+            metadata = dict(signal.get("metadata") or {})
+            metadata["botId"] = inst.id
+            metadata["botName"] = inst.name
+            metadata["botType"] = inst.type
+            if inst.type == "alerts":
+                # Notification-only: never enters the inbox approval queue.
+                metadata["mode"] = "alert"
+                signal["mode"] = "alert"
+            signal["metadata"] = metadata
+            signal["botId"] = inst.id
         stored = await save_signal(signal)
+        if inst is not None:
+            try:
+                inst.stats.lastSignalAt = stored.get("createdAt") or inst.stats.lastSignalAt
+                from app.services.trading_bot.instances import save_instance
+
+                await save_instance(inst)
+            except Exception:
+                logger.debug("Bot instance stats update skipped")
         try:
             from app.services.telegram_service import schedule_bot_signal
 
             schedule_bot_signal(stored)
         except Exception:
             logger.debug("Bot telegram hook skipped")
+        if inst is not None and inst.type == "execution" and inst.autoExecute:
+            # Immediate MT5 order — only after every risk gate, never while paused.
+            try:
+                from app.services.trading_bot.instances import execute_signal_order
+                from app.services.trading_bot.store import get_signal
+
+                order = await execute_signal_order(str(stored.get("id") or ""), trigger="auto")
+                if order is not None:
+                    stored = await get_signal(str(stored.get("id") or "")) or stored
+            except Exception as exc:
+                logger.error("Auto-execute failed for %s: %s", stored.get("id"), exc)
         return stored
 
 

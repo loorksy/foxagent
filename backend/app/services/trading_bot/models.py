@@ -63,6 +63,17 @@ class StrategyPerformanceRow(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class BotInstanceRow(Base):
+    __tablename__ = "bot_instances"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(128))
+    type: Mapped[str] = mapped_column(String(24), index=True, default="strategy")
+    enabled: Mapped[int] = mapped_column(Integer, default=0)
+    payload: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class StrategyRecord(Base):
     __tablename__ = "strategies"
 
