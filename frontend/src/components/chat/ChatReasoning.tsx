@@ -255,7 +255,8 @@ export function ChatReasoning({
             </span>
           )}
           {elapsed > 0 && (
-            <span className="ms-1 font-mono text-[11px] tabular-nums text-muted-foreground" dir="ltr">
+            <span className="font-mono text-[11px] tabular-nums text-muted-foreground" dir="ltr">
+              {" · "}
               {elapsed}s
             </span>
           )}
