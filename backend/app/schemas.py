@@ -128,6 +128,7 @@ class TradeRecommendation(BaseModel):
     model: str | None = None
     visionNotes: str | None = None
     focusTimestamp: int | None = None
+    analysis: dict[str, Any] | None = None
 
     model_config = {"extra": "allow"}
 

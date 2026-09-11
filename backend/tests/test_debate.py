@@ -85,21 +85,26 @@ async def test_crew_debate_transcript_has_four_tagged_entries(monkeypatch):
     async def past(*_a, **_k):
         return ""
 
+    async def fake_intent(*_a, **_k):
+        return "recommendation"
+
     monkeypatch.setattr("app.services.crew.run_agent_turn", fake_turn)
     monkeypatch.setattr("app.services.crew._stream_plain", fake_plain)
+    monkeypatch.setattr("app.services.crew.classify_intent", fake_intent)
     monkeypatch.setattr("app.services.crew.get_past_context", past)
     monkeypatch.setattr("app.services.crew.load_runtime_settings", load_runtime)
     monkeypatch.setattr("app.services.crew.persist_recommendation", fake_persist)
     monkeypatch.setattr("app.services.session_store.SessionLocal", None)
 
-    with pytest.raises(Exception):
-        await run_crew(
-            ChatRequest(message="scan gold", symbol="XAU_USD", timeframe="15m"),
-            emit,
-            "run_debate_crew",
-            "sk-ant-test",
-            "ffffffff-6666-4666-8666-ffffffffffff",
-        )
+    rec, final_text = await run_crew(
+        ChatRequest(message="scan gold", symbol="XAU_USD", timeframe="15m"),
+        emit,
+        "run_debate_crew",
+        "sk-ant-test",
+        "ffffffff-6666-4666-8666-ffffffffffff",
+    )
+    assert rec is None
+    assert final_text == "RiskManagerAgent brief"
     debates = [p for n, p in events if n == "agent_debate_message"]
     assert len(debates) == 4
     assert [d["role"] for d in debates] == ["bull", "bear", "bull", "bear"]

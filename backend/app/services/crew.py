@@ -33,6 +33,14 @@ from app.services.mcp_tools import (
     try_build_sdk_server,
     tool_capture_chart_screenshot,
 )
+from app.services.intent import (
+    INTENT_ANALYSIS,
+    INTENT_CHAT,
+    INTENT_RECOMMENDATION,
+    INTENT_STRATEGY,
+    classify_intent,
+    wants_macro,
+)
 from app.services.memory_log import get_past_context, store_decision
 from app.services.sdk_runtime import (
     build_sdk_options,
@@ -64,7 +72,8 @@ TECHNICAL_SYSTEM = (
     "capture_chart_screenshot if none is attached) before writing the brief. "
     "Use draw_on_chart to annotate FVGs, liquidity, or S/R you are reasoning about. "
     "Do not invent candle prints. Do not emit a final TradeRecommendation JSON — "
-    "the RiskManagerAgent will decide."
+    "the RiskManagerAgent will decide. Keep the brief tight: under ~300 words, plain "
+    "sections, no emoji, no giant markdown headers."
 )
 
 FUNDAMENTAL_SYSTEM = (
@@ -73,7 +82,8 @@ FUNDAMENTAL_SYSTEM = (
     "Use get_economic_calendar (real USD prints that move gold — NFP, CPI, FOMC, GDP, claims), "
     "get_market_sentiment, fetch_financial_news, query_macro_memory. "
     "Do not invent economic prints. If events[] is empty or the feed failed, say so. "
-    "Return a structured macro brief. Do not emit a TradeRecommendation JSON."
+    "Return a structured macro brief under ~250 words, no emoji, no giant markdown headers. "
+    "Do not emit a TradeRecommendation JSON."
     + ARTIFACT_PROTOCOL
 )
 
@@ -99,8 +109,45 @@ RISK_SYSTEM = (
     "Honor recalled lessons — do not repeat documented failure modes. "
     "If you approve, call send_recommendation with a complete TradeRecommendation JSON "
     "AND emit the same JSON as your final assistant text. "
-    "If you reject, do not call send_recommendation and do not invent prices. "
+    "The \"rationale\" field MUST be written in the trader's language (Arabic if they wrote Arabic) "
+    "and MUST be short: 3–5 plain sentences. No markdown headers, no emoji, no checklists, no "
+    "position-sizing tables — the UI renders the levels in a card and the full internal briefs on a "
+    "separate details screen, so never repeat them. "
+    "If you reject, do not call send_recommendation and do not invent prices; reply in the trader's "
+    "language with a short plain explanation (max 6 sentences): the decisive reason and what concrete "
+    "condition would change your mind. "
     "You may call record_post_trade_reflection only when evaluating a closed trade."
+)
+
+CHAT_SYSTEM = (
+    "You are FoxAgent, a trading desk assistant specialized in gold (XAU/USD) and ICT / Smart Money "
+    "analysis. You are ONE assistant backed by an internal desk team (technical analyst, macro analyst, "
+    "risk manager) — never present the internal roles as separate personas; always speak as FoxAgent. "
+    "Always reply in the language the user wrote in (Arabic in → Arabic out). "
+    "Be concise and conversational: 1–6 short sentences, no markdown headers, no emoji walls, no "
+    "checklists, no tables unless asked. "
+    "You may call tools to answer factual market questions (price, candles, calendar, news). "
+    "Never invent prices or news. Never output a TradeRecommendation JSON."
+    + ARTIFACT_PROTOCOL
+)
+
+ANALYSIS_SUMMARY_SYSTEM = (
+    "You are FoxAgent's desk voice. You receive internal briefs from the technical and macro analysts. "
+    "Write ONE concise reply to the trader in their language (Arabic in → Arabic out). "
+    "Hard limits: at most 8 short sentences OR 6 short bullet points. No big markdown headers, no emoji "
+    "spam, no trade recommendation JSON, and no entry/SL/TP levels unless the trader explicitly asked "
+    "for levels. Lead with the direct answer, then the key evidence (structure, liquidity, session, "
+    "calendar). If data was unavailable, say so plainly."
+)
+
+STRATEGY_SYSTEM = (
+    "You are FoxAgent's strategy engineer for XAU_USD. "
+    "Use list_strategies, propose_strategy, and validate_strategy to work on the strategy library. "
+    "propose_strategy saves a draft; wait for the operator before validate_strategy unless they "
+    "explicitly asked to backtest. Do not edit or delete builtin strategies. "
+    "Reply in the user's language, concisely (max 8 short sentences). "
+    "Never emit a TradeRecommendation JSON."
+    + ARTIFACT_PROTOCOL
 )
 
 
@@ -125,6 +172,7 @@ async def _stream_plain(
     session_id: str | None,
     api_key: str,
     user_message: str = "",
+    final_voice: bool = False,
 ) -> str:
     try:
         stream = await client.messages.create(
@@ -164,13 +212,23 @@ async def _stream_plain(
         if visible:
             await emit(
                 "agent_thought",
-                {"runId": run_id, "agent": agent, "delta": visible, "text": visible, "channel": channel},
+                {
+                    "runId": run_id,
+                    "agent": agent,
+                    "delta": visible,
+                    "text": visible,
+                    "channel": channel,
+                    "final": final_voice and channel == "text",
+                },
             )
     leftover = await parser.flush()
     raw = "".join(parts)
     await parser.ingest_complete(raw)
     if leftover:
-        await emit("agent_thought", {"runId": run_id, "agent": agent, "delta": leftover, "text": leftover})
+        await emit(
+            "agent_thought",
+            {"runId": run_id, "agent": agent, "delta": leftover, "text": leftover, "final": final_voice},
+        )
     await record_model_usage(last_usage, emit=emit, run_id=run_id, model=model, agent=agent, path="messages")
     return strip_ant_artifacts(raw) or raw.strip()
 
@@ -188,6 +246,7 @@ async def _try_sdk_turn(
     user_message: str = "",
     require_sdk: bool = False,
     image_b64: str | None = None,
+    final_voice: bool = False,
 ) -> str | None:
     try:
         from claude_agent_sdk import ClaudeSDKClient
@@ -246,6 +305,7 @@ async def _try_sdk_turn(
                                         "delta": visible,
                                         "text": visible,
                                         "channel": "text",
+                                        "final": final_voice,
                                     },
                                 )
                         elif "ToolUse" in type(block).__name__ or btype == "tool_use":
@@ -279,7 +339,10 @@ async def _try_sdk_turn(
         leftover = await parser.flush()
         await parser.ingest_complete(text_acc)
         if leftover:
-            await emit("agent_thought", {"runId": run_id, "agent": name, "delta": leftover, "text": leftover, "channel": "text"})
+            await emit(
+                "agent_thought",
+                {"runId": run_id, "agent": name, "delta": leftover, "text": leftover, "channel": "text", "final": final_voice},
+            )
         sdk_stats.record_success()
         return strip_ant_artifacts(text_acc) or text_acc
     finally:
@@ -301,6 +364,7 @@ async def run_agent_turn(
     user_message: str = "",
     image_b64: str | None = None,
     require_sdk: bool = False,
+    final_voice: bool = False,
 ) -> tuple[str, TradeRecommendation | None]:
     sdk_text = await _try_sdk_turn(
         name=name,
@@ -314,6 +378,7 @@ async def run_agent_turn(
         user_message=user_message,
         require_sdk=require_sdk,
         image_b64=image_b64,
+        final_voice=final_voice,
     )
     if sdk_text is not None:
         parsed = extract_json_object(sdk_text)
@@ -400,7 +465,7 @@ async def run_agent_turn(
                         if visible:
                             await emit(
                                 "agent_thought",
-                                {"runId": run_id, "agent": name, "delta": visible, "text": visible, "channel": "text"},
+                                {"runId": run_id, "agent": name, "delta": visible, "text": visible, "channel": "text", "final": final_voice},
                             )
 
         if not text_acc and not tool_uses:
@@ -428,6 +493,7 @@ async def run_agent_turn(
                                 "delta": visible,
                                 "text": visible,
                                 "channel": "text",
+                                "final": final_voice,
                             },
                         )
                     assistant_content.append({"type": "text", "text": block.text})
@@ -515,7 +581,10 @@ async def run_agent_turn(
     raw = final_text or text_acc
     await parser.ingest_complete(raw)
     if leftover:
-        await emit("agent_thought", {"runId": run_id, "agent": name, "delta": leftover, "text": leftover, "channel": "text"})
+        await emit(
+            "agent_thought",
+            {"runId": run_id, "agent": name, "delta": leftover, "text": leftover, "channel": "text", "final": final_voice},
+        )
     return strip_ant_artifacts(raw) or raw, rec
 
 
@@ -597,7 +666,7 @@ async def run_crew(
     run_id: str,
     api_key: str,
     session_id: str,
-) -> TradeRecommendation | None:
+) -> tuple[TradeRecommendation | None, str]:
     from app.services.run_control import raise_if_paused
 
     await raise_if_paused()
@@ -615,7 +684,7 @@ async def _run_crew_body(
     run_id: str,
     api_key: str,
     session_id: str,
-) -> TradeRecommendation | None:
+) -> tuple[TradeRecommendation | None, str]:
     runtime = await load_runtime_settings()
     model = resolve_model(req.model or runtime.defaultClaudeModel)
 
@@ -624,6 +693,57 @@ async def _run_crew_body(
     except ImportError as exc:
         raise AgentUnavailable("Anthropic SDK is not installed on the server") from exc
     client = anthropic.AsyncAnthropic(api_key=api_key)
+
+    hist = ""
+    try:
+        from app.services.session_store import get_session
+
+        session_state = await get_session(session_id)
+        msgs = (session_state or {}).get("state", {}).get("messages") or []
+        hist = "\n".join(f"{m.get('role', 'user')}: {m.get('text') or m.get('content') or ''}" for m in msgs[-8:])
+    except Exception:
+        hist = ""
+
+    intent = await classify_intent(client, model, req.message, hist)
+    await _emit_persist(
+        emit, session_id, "intent", "agent_intent", {"runId": run_id, "intent": intent}
+    )
+    raise_if_cancelled(run_id)
+
+    if intent == INTENT_CHAT:
+        chat_user = f"{hist}\n\nUser message:\n{req.message}" if hist else req.message
+        text, _ = await run_agent_turn(
+            name="FoxAgent",
+            system=CHAT_SYSTEM,
+            user=chat_user,
+            emit=emit,
+            run_id=run_id,
+            api_key=api_key,
+            model=model,
+            session_id=session_id,
+            user_message=req.message,
+            final_voice=True,
+        )
+        return None, text
+
+    if intent == INTENT_STRATEGY:
+        strat_user = (
+            f"Instrument: {req.symbol}\nTimeframe: {req.timeframe}\n"
+            f"{hist}\n\nTrader request:\n{req.message}"
+        )
+        text, _ = await run_agent_turn(
+            name="StrategyAgent",
+            system=STRATEGY_SYSTEM,
+            user=strat_user,
+            emit=emit,
+            run_id=run_id,
+            api_key=api_key,
+            model=model,
+            session_id=session_id,
+            user_message=req.message,
+            final_voice=True,
+        )
+        return None, text
 
     try:
         memory_block = await get_past_context(req.symbol, query=req.message)
@@ -641,17 +761,6 @@ async def _run_crew_body(
             "lessons": lessons[:8],
         }
         await _emit_persist(emit, session_id, "recall", "agent_memory_recall", payload)
-
-    hist = ""
-    session_state = None
-    try:
-        from app.services.session_store import get_session
-
-        session_state = await get_session(session_id)
-        msgs = (session_state or {}).get("state", {}).get("messages") or []
-        hist = "\n".join(f"{m.get('role', 'user')}: {m.get('text') or m.get('content') or ''}" for m in msgs[-8:])
-    except Exception:
-        hist = ""
 
     memory_prefix = (
         f"Recalled lessons (do not repeat these failure modes):\n{memory_block}\n\n" if memory_block else ""
@@ -713,21 +822,46 @@ async def _run_crew_body(
     )
 
     raise_if_cancelled(run_id)
-    fund_user = (
-        f"Instrument: {req.symbol}\nTimeframe: {req.timeframe}\n{memory_prefix}"
-        f"Technical brief:\n{technical[:4000]}\n\nTrader request:\n{req.message}"
-    )
-    fundamental, _ = await run_agent_turn(
-        name="FundamentalAgent",
-        system=FUNDAMENTAL_SYSTEM,
-        user=fund_user,
-        emit=emit,
-        run_id=run_id,
-        api_key=api_key,
-        model=model,
-        session_id=session_id,
-        user_message=req.message,
-    )
+    fundamental = ""
+    if intent == INTENT_RECOMMENDATION or wants_macro(req.message):
+        fund_user = (
+            f"Instrument: {req.symbol}\nTimeframe: {req.timeframe}\n{memory_prefix}"
+            f"Technical brief:\n{technical[:4000]}\n\nTrader request:\n{req.message}"
+        )
+        fundamental, _ = await run_agent_turn(
+            name="FundamentalAgent",
+            system=FUNDAMENTAL_SYSTEM,
+            user=fund_user,
+            emit=emit,
+            run_id=run_id,
+            api_key=api_key,
+            model=model,
+            session_id=session_id,
+            user_message=req.message,
+        )
+
+    if intent == INTENT_ANALYSIS:
+        raise_if_cancelled(run_id)
+        summary_user = (
+            f"Instrument: {req.symbol} {req.timeframe}\n\n"
+            f"TECHNICAL BRIEF:\n{technical[:3500]}\n\n"
+            + (f"MACRO BRIEF:\n{fundamental[:2500]}\n\n" if fundamental else "")
+            + f"Trader question:\n{req.message}"
+        )
+        summary = await _stream_plain(
+            client=client,
+            model=model,
+            system=ANALYSIS_SUMMARY_SYSTEM,
+            user=summary_user,
+            emit=emit,
+            agent="FoxAgent",
+            run_id=run_id,
+            session_id=session_id,
+            api_key=api_key,
+            user_message=req.message,
+            final_voice=True,
+        )
+        return None, summary or technical[:1200]
 
     debate_ctx = (
         f"Instrument {req.symbol} {req.timeframe}\n\n"
@@ -767,6 +901,13 @@ async def _run_crew_body(
 
     if rec:
         rec.model = rec.model or model
+        rec.analysis = {
+            "technical": technical,
+            "fundamental": fundamental,
+            "bull": bull,
+            "bear": bear,
+            "risk": strip_ant_artifacts(risk_text) or risk_text,
+        }
         try:
             await persist_recommendation(rec, emit)
         except RiskRejected as exc:
@@ -791,12 +932,8 @@ async def _run_crew_body(
             rating=rating,
             recommendation_id=rec.id,
         )
-        return rec
+        return rec, rec.rationale
 
     if risk_text.strip():
-        await emit("assistant", {"runId": run_id, "text": risk_text.strip()})
-        await append_session_event(
-            session_id, "message", {"role": "assistant", "text": risk_text.strip(), "runId": run_id}
-        )
-        raise AgentUnavailable("RiskManagerAgent rejected the setup or returned no TradeRecommendation JSON")
+        return None, risk_text.strip()
     raise AgentUnavailable("RiskManagerAgent returned an empty response")

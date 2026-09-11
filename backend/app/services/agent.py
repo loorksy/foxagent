@@ -53,7 +53,7 @@ Output contract (final message MUST contain a single JSON object, no markdown fe
     "takeProfitLevels": [{"level": 1, "price": 0, "ratio": "1:1.6"}, {"level": 2, "price": 0, "ratio": "1:3.0"}],
     "riskRewardRatio": 3.0
   },
-  "rationale": "human-like mentor explanation",
+  "rationale": "3-5 short sentences in the trader's language (Arabic if they wrote Arabic) — no markdown headers, no emoji, no checklists",
   "confluence": ["..."],
   "klineOverlays": [
     {
@@ -124,6 +124,7 @@ async def run_chat(req: ChatRequest, emit: Emit) -> dict[str, Any]:
 
     run_id = new_id("run")
     rec: TradeRecommendation | None = None
+    final_text = ""
     session = await ensure_session(req.sessionId, req.symbol, req.timeframe)
     session_id = session["id"]
     tracker = UsageTracker(run_id=run_id, model=req.model or "")
@@ -159,7 +160,7 @@ async def run_chat(req: ChatRequest, emit: Emit) -> dict[str, Any]:
             raise AgentUnavailable(
                 "ANTHROPIC_API_KEY is missing. Save a real key in Settings — FoxAgent will not invent a setup."
             )
-        rec = await run_crew(req, emit, run_id, api_key, session_id)
+        rec, final_text = await run_crew(req, emit, run_id, api_key, session_id)
     except SystemPaused as exc:
         detail = str(exc)
         await emit("error", {"runId": run_id, "sessionId": session_id, "detail": detail, "paused": True})
@@ -192,15 +193,24 @@ async def run_chat(req: ChatRequest, emit: Emit) -> dict[str, Any]:
     finally:
         reset_usage_tracker(usage_token)
 
-    if rec:
+    if not session.get("title"):
         session["title"] = req.message.strip()[:80] or session.get("title") or req.symbol
-        session["symbol"] = req.symbol
-        session["timeframe"] = req.timeframe
-        await save_session(session)
+    session["symbol"] = req.symbol
+    session["timeframe"] = req.timeframe
+    await save_session(session)
+
+    if rec:
         await append_session_event(
             session_id,
             "message",
             {"role": "assistant", "text": rec.rationale, "recommendationId": rec.id, "usage": tracker.public()},
+        )
+    elif final_text.strip():
+        await emit("assistant", {"runId": run_id, "text": final_text.strip()})
+        await append_session_event(
+            session_id,
+            "message",
+            {"role": "assistant", "text": final_text.strip(), "runId": run_id, "usage": tracker.public()},
         )
 
     usage = await complete(

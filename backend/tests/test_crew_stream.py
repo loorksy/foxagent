@@ -71,8 +71,12 @@ async def test_crew_emits_real_event_contract(monkeypatch):
             await emit("agent_recommendation", dumped)
         return {"ok": True, "recommendation": dumped}
 
+    async def fake_intent(*_a, **_k):
+        return "recommendation"
+
     monkeypatch.setattr("app.services.crew.run_agent_turn", fake_turn)
     monkeypatch.setattr("app.services.crew._stream_plain", fake_plain)
+    monkeypatch.setattr("app.services.crew.classify_intent", fake_intent)
     monkeypatch.setattr("app.services.crew.get_past_context", past_context)
     monkeypatch.setattr("app.services.crew.load_runtime_settings", load_runtime)
     monkeypatch.setattr("app.services.crew.persist_recommendation", fake_persist)
@@ -80,7 +84,7 @@ async def test_crew_emits_real_event_contract(monkeypatch):
     monkeypatch.setattr("app.services.memory_log.SessionLocal", None)
     monkeypatch.setattr("app.services.session_store.SessionLocal", None)
 
-    rec = await run_crew(
+    rec, final_text = await run_crew(
         ChatRequest(message="scan gold", symbol="XAU_USD", timeframe="15m"),
         emit,
         "run_test",
@@ -89,6 +93,9 @@ async def test_crew_emits_real_event_contract(monkeypatch):
     )
     kinds = [name for name, _ in events]
     assert rec is not None
+    assert final_text == rec.rationale
+    assert rec.analysis is not None and "technical" in rec.analysis
+    assert "agent_intent" in kinds
     assert "agent_memory_recall" in kinds
     assert "agent_thought" in kinds
     assert "agent_tool_call" in kinds
