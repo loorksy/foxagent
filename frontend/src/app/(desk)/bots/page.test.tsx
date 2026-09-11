@@ -1,23 +1,13 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { useLocale } from "@/i18n";
-import { useInbox } from "@/stores/inbox";
+import { useBotInstances } from "@/stores/botInstances";
 
 vi.mock("@/lib/api", () => ({
   api: {
-    botsRoom: vi.fn().mockResolvedValue({
-      agents: [],
-      news: { open: false },
-      circuits: { safeMode: false },
-      running: { running: false },
-    }),
-    botStatus: vi.fn().mockResolvedValue({ running: false, cycles: 0, lastError: "" }),
-    botSignals: vi.fn().mockResolvedValue({ signals: [] }),
-    botPerformance: vi.fn().mockResolvedValue({ performance: [] }),
-    botPreflight: vi.fn().mockResolvedValue({ ok: true, checks: [] }),
-    economicCalendar: vi.fn().mockResolvedValue({ events: [], source: "" }),
+    botInstances: vi.fn().mockResolvedValue({ instances: [], paused: false }),
+    mt5Status: vi.fn().mockResolvedValue({ connected: false }),
     strategies: vi.fn().mockResolvedValue({ strategies: [] }),
-    settings: vi.fn().mockResolvedValue({}),
   },
 }));
 
@@ -27,14 +17,47 @@ vi.mock("next/link", () => ({
 
 import BotsRoom from "./page";
 
+const mockBot = {
+  id: "bot-test-1",
+  name: "Gold Scanner",
+  type: "strategy" as const,
+  enabled: true,
+  scanIntervalSeconds: 60,
+  agents: ["multi_strategy"],
+  strategyIds: [],
+  minRr: 2,
+  maxRiskPercent: 1,
+  allowedSessions: ["london", "ny", "asian"],
+  autoExecute: false,
+  orderVolume: 0.01,
+  createdAt: "2026-01-01T00:00:00Z",
+  stats: { cycles: 12, lastError: "", lastSignalAt: "2026-01-02T10:00:00Z" },
+  running: true,
+};
+
 describe("Bots room", () => {
-  it("shows an explicit stopped desk, not a blank crash", () => {
+  beforeEach(() => {
     useLocale.setState({ locale: "en" });
-    useInbox.setState({
-      desk: { paused: false, botRunning: false, warehouseStale: false, openCount: 0 },
-    } as never);
+    useBotInstances.setState({
+      instances: [mockBot],
+      paused: false,
+      loading: false,
+      error: "",
+      load: vi.fn(),
+      create: vi.fn(),
+      patch: vi.fn(),
+      remove: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+    });
+  });
+
+  it("shows a bot card and the create button", () => {
     render(<BotsRoom />);
     expect(screen.getByRole("heading", { name: "Bots room" })).toBeInTheDocument();
-    expect(screen.getAllByText("Off or silent").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /Create bot/i })).toBeInTheDocument();
+    expect(screen.getByText("Gold Scanner")).toBeInTheDocument();
+    expect(screen.getByText("Strategy bot")).toBeInTheDocument();
+    expect(screen.getByText("Running")).toBeInTheDocument();
   });
 });

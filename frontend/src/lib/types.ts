@@ -396,6 +396,46 @@ export type BotStatus = {
   lastError?: string;
 };
 
+export type BotInstanceType = "strategy" | "quant" | "alerts" | "execution";
+
+export type BotInstanceStats = {
+  cycles: number;
+  lastError: string;
+  lastSignalAt: string | null;
+};
+
+export type BotInstance = {
+  id: string;
+  name: string;
+  type: BotInstanceType;
+  enabled: boolean;
+  scanIntervalSeconds: number;
+  agents: string[];
+  strategyIds: string[];
+  minRr: number;
+  maxRiskPercent: number;
+  allowedSessions: string[];
+  autoExecute: boolean;
+  orderVolume: number;
+  createdAt: string;
+  stats: BotInstanceStats;
+  isDefault?: boolean;
+  running?: boolean;
+};
+
+export type BotInstanceCreatePayload = {
+  name: string;
+  type: BotInstanceType;
+  scanIntervalSeconds: number;
+  agents?: string[];
+  strategyIds?: string[];
+  minRr?: number;
+  maxRiskPercent?: number;
+  allowedSessions?: string[];
+  autoExecute?: boolean;
+  orderVolume?: number;
+};
+
 export type BacktestTrade = {
   strategyId: string;
   timeframe: string;

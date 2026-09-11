@@ -206,6 +206,29 @@ export const api = {
   pinStrategy: (id: string) => http<{ ok: boolean; strategy?: import("./types").StrategyRule }>(`/api/strategies/${id}/pin`, { method: "POST" }),
   unpinStrategy: (id: string) =>
     http<{ ok: boolean; strategy?: import("./types").StrategyRule }>(`/api/strategies/${id}/unpin`, { method: "POST" }),
+  botInstances: () => http<{ instances: import("./types").BotInstance[]; paused: boolean }>("/api/bots/instances"),
+  createBotInstance: (body: import("./types").BotInstanceCreatePayload) =>
+    http<import("./types").BotInstance & { ok?: boolean }>("/api/bots/instances", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  patchBotInstance: (id: string, body: Record<string, unknown>) =>
+    http<import("./types").BotInstance & { ok?: boolean }>(`/api/bots/instances/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteBotInstance: (id: string) =>
+    http<{ ok: boolean; deleted?: string }>(`/api/bots/instances/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  startBotInstance: (id: string) =>
+    http<import("./types").BotInstance & { ok?: boolean }>(`/api/bots/instances/${encodeURIComponent(id)}/start`, {
+      method: "POST",
+    }),
+  stopBotInstance: (id: string) =>
+    http<import("./types").BotInstance & { ok?: boolean }>(`/api/bots/instances/${encodeURIComponent(id)}/stop`, {
+      method: "POST",
+    }),
+  botInstanceSignals: (id: string) =>
+    http<{ signals: import("./types").BotSignal[] }>(`/api/bots/instances/${encodeURIComponent(id)}/signals`),
   botsRoom: () => http<Record<string, unknown>>("/api/bots"),
   botsNews: () => http<{ open: boolean; windows: Array<Record<string, unknown>> }>("/api/bots/news"),
   botScans: () => http<{ scans: Array<Record<string, unknown>> }>("/api/bot/scans"),
