@@ -4,7 +4,8 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { useWorkspace } from "@/stores/workspace";
 import { api } from "@/lib/api";
 import { DARK_CHART_STYLES } from "@/lib/chart-styles";
-import { applyOverlays, clearOverlays, focusTimestamp, type ChartLike } from "@/lib/overlays";
+import { clearOverlays, focusTimestamp } from "@/lib/overlays";
+import { AgentCursor, useAgentDrawing, type PixelChart } from "@/components/chart/AgentCursor";
 import { cn } from "@/lib/utils";
 import type { KLineBar, KlineOverlay } from "@/lib/types";
 
@@ -14,7 +15,7 @@ export type ChartHandle = {
   focus: (ts: number) => void;
 };
 
-type ChartApi = ChartLike & {
+type ChartApi = PixelChart & {
   applyNewData: (bars: KLineBar[]) => void;
   updateData: (bar: KLineBar) => void;
   createIndicator: (name: string, isStack?: boolean, pane?: { id: string }) => void;
@@ -34,15 +35,21 @@ const ChartCanvas = forwardRef<ChartHandle, Props>(function ChartCanvas({ classN
   const chartNonce = useWorkspace((s) => s.chartNonce);
   const command = useWorkspace((s) => s.command);
   const prices = useWorkspace((s) => s.prices);
+  const { draw, interrupt, cursor, drawing } = useAgentDrawing(hostRef);
 
   useImperativeHandle(ref, () => ({
     apply: async (overlays, ts) => {
       if (!chartRef.current) return;
+      interrupt();
       clearOverlays(chartRef.current);
-      await applyOverlays(chartRef.current, overlays, true);
       focusTimestamp(chartRef.current, ts);
+      await draw(chartRef.current, overlays, { initialDelayMs: 320 });
     },
-    clear: () => chartRef.current && clearOverlays(chartRef.current),
+    clear: () => {
+      if (!chartRef.current) return;
+      interrupt();
+      clearOverlays(chartRef.current);
+    },
     focus: (ts) => chartRef.current && focusTimestamp(chartRef.current, ts),
   }));
 
@@ -94,6 +101,7 @@ const ChartCanvas = forwardRef<ChartHandle, Props>(function ChartCanvas({ classN
     boot();
     return () => {
       disposed = true;
+      interrupt();
       ro?.disconnect();
       if (host) {
         import("klinecharts").then((mod) => {
@@ -106,7 +114,7 @@ const ChartCanvas = forwardRef<ChartHandle, Props>(function ChartCanvas({ classN
       }
       chartRef.current = null;
     };
-  }, [symbol, period.granularity, chartNonce]);
+  }, [symbol, period.granularity, chartNonce, interrupt]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -129,22 +137,25 @@ const ChartCanvas = forwardRef<ChartHandle, Props>(function ChartCanvas({ classN
     const chart = chartRef.current;
     if (!chart || !command) return;
     if (command.type === "clear") {
+      interrupt();
       clearOverlays(chart);
     } else if (command.type === "focus") {
       focusTimestamp(chart, command.timestamp);
     } else if (command.type === "apply") {
+      interrupt();
       clearOverlays(chart);
-      applyOverlays(chart, command.overlays, true).then(() => {
-        focusTimestamp(chart, command.focusTimestamp);
-      });
+      focusTimestamp(chart, command.focusTimestamp);
+      // Wait for the focus scroll to settle so anchor points are on-screen.
+      draw(chart, command.overlays, { initialDelayMs: 320 });
     } else if (command.type === "append") {
-      applyOverlays(chart, command.overlays, true);
+      draw(chart, command.overlays);
     }
-  }, [command]);
+  }, [command, draw, interrupt]);
 
   return (
-    <div className={cn("h-full w-full bg-background", className)}>
+    <div className={cn("relative h-full w-full bg-background", className)}>
       <div ref={hostRef} className="h-full w-full" />
+      <AgentCursor pos={cursor} drawing={drawing} />
     </div>
   );
 });
