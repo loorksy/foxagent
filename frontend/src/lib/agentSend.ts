@@ -42,8 +42,12 @@ function fvgOverlays(data: StructureScan): KlineOverlay[] {
 
 export async function sendAgentMessage(raw: string) {
   const text = raw.trim();
+  if (!text) return;
   const streaming = useChat.getState().streaming;
-  if (!text || streaming) return;
+  if (streaming) {
+    useChat.getState().queueMessage(text);
+    return;
+  }
 
   const workspace = useWorkspace.getState();
   const chat = useChat.getState();
@@ -237,5 +241,10 @@ export async function sendAgentMessage(raw: string) {
   } finally {
     useChat.setState({ abort: null });
     useChat.getState().complete();
+    const queued = useChat.getState().queuedText;
+    if (queued) {
+      useChat.getState().clearQueue();
+      void sendAgentMessage(queued);
+    }
   }
 }

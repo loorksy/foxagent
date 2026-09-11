@@ -16,6 +16,8 @@ export function ChatComposer({ hero = false }: { hero?: boolean }) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const streaming = useChat((s) => s.streaming);
+  const queuedText = useChat((s) => s.queuedText);
+  const steps = useChat((s) => s.steps);
   const sessionUsage = useChat((s) => s.sessionUsage);
   const runUsage = useChat((s) => s.runUsage);
   const model = useChat((s) => s.model);
@@ -63,6 +65,26 @@ export function ChatComposer({ hero = false }: { hero?: boolean }) {
               {t(`quick.${q.id}` as MessageKey)}
             </button>
           ))}
+        </div>
+      )}
+      {streaming && (
+        <p className="mb-2 flex items-center gap-2 px-1 text-[11px] text-muted-foreground">
+          <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-info" />
+          <span className="min-w-0 truncate">
+            {[...steps].reverse().find((s) => s.kind === "tool" && s.toolOutput == null)?.toolLabel ||
+              [...steps].reverse().find((s) => s.kind === "tool")?.toolLabel ||
+              t("run.thinking")}
+          </span>
+        </p>
+      )}
+      {queuedText && (
+        <div className="mb-2 flex items-center gap-2 rounded-xl border border-border/60 bg-muted/20 px-3 py-2 text-[12px]">
+          <span className="min-w-0 flex-1 truncate text-muted-foreground">
+            {t("run.queued")}: <span className="text-foreground">{queuedText}</span>
+          </span>
+          <button type="button" className="shrink-0 text-[11px] text-muted-foreground hover:text-foreground" onClick={() => useChat.getState().clearQueue()}>
+            {t("run.queuedCancel")}
+          </button>
         </div>
       )}
       <form onSubmit={onSubmit} className="relative">
