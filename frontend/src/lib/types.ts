@@ -166,6 +166,12 @@ export type TokenUsage = {
   calls?: number;
 };
 
+export type ChatImage = {
+  id: string;
+  src: string;
+  caption?: string;
+};
+
 export type ChatMessage = {
   id: string;
   role: ChatRole;
@@ -177,6 +183,7 @@ export type ChatMessage = {
   strategyValidation?: StrategyValidation;
   strategyExperiment?: StrategyExperimentJob;
   usage?: TokenUsage;
+  images?: ChatImage[];
 };
 
 export type StructureFvg = {
@@ -226,6 +233,7 @@ export type RunStep = {
   channel?: string;
   toolId?: string;
   toolName?: string;
+  toolLabel?: string;
   toolInput?: unknown;
   toolOutput?: unknown;
   role?: string;
@@ -237,6 +245,7 @@ export type RunTool = {
   id: string;
   agent: string;
   name: string;
+  label?: string;
   input?: unknown;
   output?: unknown;
 };

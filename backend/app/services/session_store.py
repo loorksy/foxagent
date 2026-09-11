@@ -226,4 +226,23 @@ async def append_session_event(session_id: str, kind: str, payload: dict[str, An
         state["recommendationId"] = payload.get("id")
         if payload.get("klineOverlays"):
             state["overlays"] = payload.get("klineOverlays")
+    elif kind == "overlays":
+        incoming = payload.get("overlays") or []
+        if payload.get("replace"):
+            state["overlays"] = list(incoming)
+        else:
+            existing = list(state.get("overlays") or [])
+            existing.extend(incoming)
+            state["overlays"] = existing
+    elif kind == "image":
+        imgs = list(state.get("images") or [])
+        imgs.append({"id": payload.get("id"), "url": payload.get("url"), "title": payload.get("title")})
+        state["images"] = imgs[-8:]
+        msgs = state.get("messages") or []
+        for m in reversed(msgs):
+            if m.get("role") == "assistant":
+                attached = list(m.get("images") or [])
+                attached.append({"id": payload.get("id"), "src": payload.get("url"), "caption": payload.get("title")})
+                m["images"] = attached[-8:]
+                break
     await save_session(item)

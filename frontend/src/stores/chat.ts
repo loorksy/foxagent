@@ -4,6 +4,7 @@ import { create } from "zustand";
 import type {
   AgentSession,
   Artifact,
+  ChatImage,
   ChatMessage,
   DebateLine,
   MemoryRecall,
@@ -53,7 +54,8 @@ type ChatState = {
   appendToken: (text: string) => void;
   appendThought: (agent: string, text: string, channel?: string) => void;
   upsertToolCall: (tool: RunTool) => void;
-  upsertToolResult: (id: string, output: unknown) => void;
+  upsertToolResult: (id: string, output: unknown, name?: string) => void;
+  attachImage: (image: ChatImage) => void;
   addDebate: (line: DebateLine) => void;
   addRecall: (recall: MemoryRecall) => void;
   setIntent: (intent: string) => void;
@@ -103,9 +105,10 @@ function asMessages(raw: unknown): ChatMessage[] {
         strategyValidation: row.strategyValidation,
         strategyExperiment: row.strategyExperiment,
         usage: row.usage,
+        images: Array.isArray(row.images) ? row.images : undefined,
       } satisfies ChatMessage;
     })
-    .filter((m) => m.text || m.recommendationId || m.strategyProposal || m.strategyExperiment);
+    .filter((m) => m.text || m.recommendationId || m.strategyProposal || m.strategyExperiment || (m.images && m.images.length));
 }
 
 export const useChat = create<ChatState>((set) => ({
@@ -230,11 +233,19 @@ export const useChat = create<ChatState>((set) => ({
     set((s) => {
       const idx = s.tools.findIndex((t) => t.id && t.id === tool.id);
       const tools = idx >= 0 ? s.tools.map((t, i) => (i === idx ? { ...t, ...tool } : t)) : [...s.tools, tool];
-      const stepIdx = s.steps.findIndex((st) => st.kind === "tool" && st.toolId === tool.id);
+      const stepIdx = s.steps.findIndex((st) => st.kind === "tool" && st.toolId && st.toolId === tool.id);
       const steps =
         stepIdx >= 0
           ? s.steps.map((st, i) =>
-              i === stepIdx ? { ...st, toolName: tool.name, toolInput: tool.input, agent: tool.agent } : st
+              i === stepIdx
+                ? {
+                    ...st,
+                    toolName: tool.name,
+                    toolLabel: tool.label || st.toolLabel,
+                    toolInput: tool.input,
+                    agent: tool.agent,
+                  }
+                : st
             )
           : [
               ...s.steps,
@@ -243,17 +254,38 @@ export const useChat = create<ChatState>((set) => ({
                 agent: tool.agent,
                 toolId: tool.id,
                 toolName: tool.name,
+                toolLabel: tool.label,
                 toolInput: tool.input,
                 at: Date.now(),
               },
             ];
       return { tools, steps };
     }),
-  upsertToolResult: (id, output) =>
-    set((s) => ({
-      tools: s.tools.map((t) => (t.id === id ? { ...t, output } : t)),
-      steps: s.steps.map((st) => (st.kind === "tool" && st.toolId === id ? { ...st, toolOutput: output } : st)),
-    })),
+  upsertToolResult: (id, output, name) =>
+    set((s) => {
+      const toolHit =
+        s.tools.find((t) => Boolean(id) && t.id === id) ||
+        s.tools.find((t) => Boolean(name) && t.name === name && t.output == null);
+      const stepHit =
+        s.steps.find((st) => st.kind === "tool" && Boolean(id) && st.toolId === id) ||
+        s.steps.find((st) => st.kind === "tool" && st.toolOutput == null && Boolean(name) && st.toolName === name);
+      return {
+        tools: s.tools.map((t) => (toolHit && t.id === toolHit.id ? { ...t, output } : t)),
+        steps: s.steps.map((st) => (stepHit && st === stepHit ? { ...st, toolOutput: output } : st)),
+      };
+    }),
+  attachImage: (image) =>
+    set((s) => {
+      const msgs = [...s.messages];
+      const last = [...msgs].reverse().find((m) => m.role === "assistant");
+      if (!last) {
+        return {
+          messages: [...msgs, { id: uid("ast"), role: "assistant", text: "", createdAt: Date.now(), images: [image] }],
+        };
+      }
+      const images = [...(last.images || []).filter((x) => x.id !== image.id), image];
+      return { messages: msgs.map((m) => (m.id === last.id ? { ...m, images } : m)) };
+    }),
   addDebate: (line) =>
     set((s) => ({
       debate: [...s.debate, line],
@@ -303,6 +335,10 @@ export const useChat = create<ChatState>((set) => ({
       runEndedAt: s.streaming ? Date.now() : s.runEndedAt,
       sessionUsage: s.streaming ? addUsage(s.sessionUsage, s.runUsage) : s.sessionUsage,
       messages: s.messages.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
+      tools: s.tools.map((t) => (t.output == null ? { ...t, output: { ok: true } } : t)),
+      steps: s.steps.map((st) =>
+        st.kind === "tool" && st.toolOutput == null ? { ...st, toolOutput: { ok: true } } : st
+      ),
     })),
   hydrateFromSession: (session) => {
     const state = session.state || {};
@@ -326,6 +362,7 @@ export const useChat = create<ChatState>((set) => ({
         agent: tool.agent,
         toolId: tool.id,
         toolName: tool.name,
+        toolLabel: tool.label,
         toolInput: tool.input,
         toolOutput: tool.output,
         at: 0,

@@ -4,7 +4,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { useWorkspace } from "@/stores/workspace";
 import { api } from "@/lib/api";
 import { DARK_CHART_STYLES } from "@/lib/chart-styles";
-import { clearOverlays, focusTimestamp } from "@/lib/overlays";
+import { clearOverlays, createChartOverlay, focusTimestamp } from "@/lib/overlays";
 import { AgentCursor, useAgentDrawing, type PixelChart } from "@/components/chart/AgentCursor";
 import { cn } from "@/lib/utils";
 import type { KLineBar, KlineOverlay } from "@/lib/types";
@@ -92,6 +92,10 @@ const ChartCanvas = forwardRef<ChartHandle, Props>(function ChartCanvas({ classN
         const data = await api.candles(symbol, period.granularity, 400);
         barsRef.current = data.candles;
         chart.applyNewData(data.candles);
+        const saved = useWorkspace.getState().overlays;
+        if (saved.length) {
+          saved.forEach((ov, i) => createChartOverlay(chart, ov, i));
+        }
       } catch (err) {
         console.error(err);
       }

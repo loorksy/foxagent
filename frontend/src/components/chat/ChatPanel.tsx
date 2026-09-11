@@ -110,6 +110,16 @@ export function ChatPanel() {
                         {m.streaming || (showInspector && m.id === messages.filter((x) => x.role === "assistant").at(-1)?.id) ? (
                           <ChatReasoning />
                         ) : null}
+                        {m.images?.length ? (
+                          <div className="mt-2 space-y-2">
+                            {m.images.map((img) => (
+                              <figure key={img.id} className="overflow-hidden rounded-xl border border-border/60 bg-card">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={img.src} alt={img.caption || ""} className="max-h-80 w-full object-contain" />
+                              </figure>
+                            ))}
+                          </div>
+                        ) : null}
                         {m.streaming && m.text ? (
                           <p className="whitespace-pre-wrap py-0.5 leading-7">
                             {m.text}

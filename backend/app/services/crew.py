@@ -62,6 +62,16 @@ DEBATE_MAX_SECONDS = 90.0
 
 logger = logging.getLogger(__name__)
 
+TOOL_NARRATION = (
+    "\n\nTOOL NARRATION (mandatory, in the trader's language — Arabic if they wrote Arabic):\n"
+    "Before every tool call, write ONE short present-tense phrase (max 8 words) describing what you "
+    "are doing. Examples: أراجع شارت الربع ساعة / أقرأ الأخبار / أرسم خط الاتجاه / أراجع النماذج.\n"
+    "After the tool returns, write ONE short past-tense confirmation: تمت معاينة الشارت / راجعت الأخبار.\n"
+    "Never mention programmatic tool names (get_candles, draw_on_chart, capture_chart_screenshot, …).\n"
+    "After draw_on_chart you will receive the annotated chart image — look at it and say whether the "
+    "lines landed on the structure you intended; if not, draw again.\n"
+)
+
 TECHNICAL_SYSTEM = (
     SYSTEM_PROMPT
     + "\n\nYou are TechnicalAgent. Focus only on ICT / SMC: liquidity sweeps, "
@@ -74,6 +84,7 @@ TECHNICAL_SYSTEM = (
     "Do not invent candle prints. Do not emit a final TradeRecommendation JSON — "
     "the RiskManagerAgent will decide. Keep the brief tight: under ~300 words, plain "
     "sections, no emoji, no giant markdown headers."
+    + TOOL_NARRATION
 )
 
 FUNDAMENTAL_SYSTEM = (
@@ -85,6 +96,7 @@ FUNDAMENTAL_SYSTEM = (
     "Return a structured macro brief under ~250 words, no emoji, no giant markdown headers. "
     "Do not emit a TradeRecommendation JSON."
     + ARTIFACT_PROTOCOL
+    + TOOL_NARRATION
 )
 
 BULL_SYSTEM = (
@@ -117,6 +129,7 @@ RISK_SYSTEM = (
     "language with a short plain explanation (max 6 sentences): the decisive reason and what concrete "
     "condition would change your mind. "
     "You may call record_post_trade_reflection only when evaluating a closed trade."
+    + TOOL_NARRATION
 )
 
 CHAT_SYSTEM = (
@@ -129,6 +142,7 @@ CHAT_SYSTEM = (
     "You may call tools to answer factual market questions (price, candles, calendar, news). "
     "Never invent prices or news. Never output a TradeRecommendation JSON."
     + ARTIFACT_PROTOCOL
+    + TOOL_NARRATION
 )
 
 ANALYSIS_SUMMARY_SYSTEM = (
@@ -148,7 +162,60 @@ STRATEGY_SYSTEM = (
     "Reply in the user's language, concisely (max 8 short sentences). "
     "Never emit a TradeRecommendation JSON."
     + ARTIFACT_PROTOCOL
+    + TOOL_NARRATION
 )
+
+
+def _looks_arabic(text: str) -> bool:
+    return any("\u0600" <= ch <= "\u06FF" for ch in (text or ""))
+
+
+def last_working_phrase(text: str) -> str:
+    """Last short line the agent wrote — used as the live tool label."""
+    if not text or not text.strip():
+        return ""
+    chunks: list[str] = []
+    for line in text.replace("\r", "").split("\n"):
+        line = line.strip().lstrip("-*#> ").strip()
+        if line:
+            chunks.append(line)
+    if not chunks:
+        return ""
+    phrase = chunks[-1]
+    if len(phrase) > 90:
+        for sep in (". ", "。", "؟", "?", "!", "！"):
+            if sep in phrase:
+                phrase = phrase.rsplit(sep, 1)[-1].strip()
+                break
+        phrase = phrase[:90].rstrip()
+    return phrase
+
+
+def decorate_emit(emit: Any, session_id: str | None = None):
+    """Attach agent-written labels to tool calls and persist images/overlays."""
+    buf = {"text": ""}
+
+    async def wrapped(event: str, payload: dict[str, Any]) -> None:
+        p = dict(payload or {})
+        if event == "agent_thought":
+            delta = str(p.get("delta") or p.get("text") or "")
+            buf["text"] = (buf["text"] + delta)[-4000:]
+        elif event == "agent_tool_call" and not p.get("label"):
+            phrase = last_working_phrase(buf["text"])
+            if phrase:
+                p["label"] = phrase
+        await emit(event, p)
+        if not session_id:
+            return
+        try:
+            if event == "agent_image":
+                await append_session_event(session_id, "image", p)
+            elif event == "agent_chart_overlays":
+                await append_session_event(session_id, "overlays", p)
+        except Exception:
+            logger.debug("session persist skipped for %s", event)
+
+    return wrapped
 
 
 async def _emit_persist(emit, session_id: str | None, kind: str, event: str, payload: dict[str, Any]) -> None:
@@ -540,19 +607,19 @@ async def run_agent_turn(
         results = []
         for tu in tool_uses:
             try:
-                out = await dispatch_tool(tu["name"], tu["input"], emit)
+                out = await dispatch_tool(tu["name"], tu["input"], emit, tool_id=tu["id"], agent=name)
             except Exception as exc:
                 out = {"error": str(exc)}
-            await emit(
-                "agent_tool_result",
-                {
-                    "runId": run_id,
-                    "agent": name,
-                    "name": tu["name"],
-                    "id": tu["id"],
-                    "output": out if not isinstance(out, str) else {"image": "png"},
-                },
-            )
+                await emit(
+                    "agent_tool_result",
+                    {
+                        "runId": run_id,
+                        "agent": name,
+                        "name": tu["name"],
+                        "id": tu["id"],
+                        "output": out,
+                    },
+                )
             if session_id:
                 await append_session_event(
                     session_id,
@@ -566,9 +633,16 @@ async def run_agent_turn(
                         rec = TradeRecommendation.model_validate(payload)
                     except Exception:
                         pass
+            image_b64 = None
             if tu["name"] == "capture_chart_screenshot" and isinstance(out, str):
-                content: Any = [
-                    {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": out}}
+                image_b64 = out
+            elif isinstance(out, dict) and out.get("image"):
+                image_b64 = out.get("image") if isinstance(out.get("image"), str) and len(str(out.get("image"))) > 80 else None
+            if image_b64:
+                public = {k: v for k, v in (out.items() if isinstance(out, dict) else {"ok": True}.items()) if k != "image"}
+                content = [
+                    {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": image_b64}},
+                    {"type": "text", "text": json.dumps(public or {"ok": True}, default=str)[:4000]},
                 ]
             else:
                 content = json.dumps(out, default=str)[:20_000]
@@ -685,6 +759,7 @@ async def _run_crew_body(
     api_key: str,
     session_id: str,
 ) -> tuple[TradeRecommendation | None, str]:
+    emit = decorate_emit(emit, session_id)
     runtime = await load_runtime_settings()
     model = resolve_model(req.model or runtime.defaultClaudeModel)
 
@@ -771,6 +846,8 @@ async def _run_crew_body(
     if not is_quick_question(req.message):
         gran = normalize_granularity(req.timeframe)
         chart_b64 = await tool_capture_chart_screenshot(req.symbol, gran, 180)
+        from app.services.mcp_tools import publish_chart_image
+
         await emit(
             "agent_tool_call",
             {
@@ -779,6 +856,7 @@ async def _run_crew_body(
                 "name": "capture_chart_screenshot",
                 "id": "vision-forced",
                 "input": {"instrument": req.symbol, "granularity": gran, "count": 180},
+                "label": "معاينة الشارت" if _looks_arabic(req.message) else "Reading the chart",
             },
         )
         await emit(
@@ -791,6 +869,7 @@ async def _run_crew_body(
                 "output": {"image": "png", "bytes": len(chart_b64)},
             },
         )
+        await publish_chart_image(emit, chart_b64, title="chart")
         if session_id:
             await append_session_event(
                 session_id,

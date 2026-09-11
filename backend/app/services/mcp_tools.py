@@ -6,6 +6,7 @@ from typing import Any, Callable, Awaitable
 
 from app.services.analysis import analyze_structure, calculate_ict_levels, structure_summary
 from app.services.chart_capture import render_candles_b64
+from app.services.chart_shots import save_chart_shot
 from app.services.macro_feed import fetch_financial_news, get_economic_calendar, get_market_sentiment
 from app.services.memory_log import get_past_context
 from app.services.oanda import oanda
@@ -25,6 +26,60 @@ def set_tool_emit(emit: Emit | None):
 
 def reset_tool_emit(token) -> None:
     _current_emit.reset(token)
+
+
+def compact_tool_output(name: str, out: Any) -> Any:
+    if name == "capture_chart_screenshot" and isinstance(out, str):
+        return {"image": "png", "bytes": len(out)}
+    if isinstance(out, dict):
+        public = {k: v for k, v in out.items() if k != "image"}
+        if "image" in out:
+            public["image"] = "png"
+        return public
+    if isinstance(out, str):
+        return {"text": out[:400]}
+    return out
+
+
+async def publish_chart_image(emit: Emit | None, b64: str, title: str = "") -> dict[str, str] | None:
+    sink = emit or _current_emit.get()
+    shot = save_chart_shot(b64)
+    if not shot:
+        return None
+    payload = {"id": shot["id"], "url": shot["url"], "kind": "chart"}
+    if title:
+        payload["title"] = title
+    if sink:
+        await sink("agent_image", payload)
+    return shot
+
+
+async def emit_tool_result(
+    name: str,
+    out: Any,
+    emit: Emit | None = None,
+    tool_id: str = "",
+    agent: str = "",
+) -> None:
+    sink = emit or _current_emit.get()
+    if not sink:
+        return
+    await sink(
+        "agent_tool_result",
+        {
+            "name": name,
+            "id": tool_id,
+            "agent": agent,
+            "output": compact_tool_output(name, out),
+        },
+    )
+    image = None
+    if name == "capture_chart_screenshot" and isinstance(out, str):
+        image = out
+    elif isinstance(out, dict) and isinstance(out.get("image"), str) and len(out["image"]) > 80:
+        image = out["image"]
+    if image:
+        await publish_chart_image(sink, image, title=name)
 
 
 async def tool_get_candles(instrument: str, granularity: str, count: int = 300) -> list[dict[str, Any]]:
@@ -166,19 +221,37 @@ async def tool_list_strategies(status: str = "active") -> dict[str, Any]:
     return {"strategies": [r.model_dump(mode="json") for r in rows]}
 
 
-async def tool_draw_on_chart(overlays: list[dict[str, Any]] | None, emit: Emit | None = None) -> dict[str, Any]:
-    """Emit additive chart overlays the model chose during analysis."""
+async def tool_draw_on_chart(
+    overlays: list[dict[str, Any]] | None,
+    emit: Emit | None = None,
+    instrument: str = "XAU_USD",
+    granularity: str = "M15",
+) -> dict[str, Any]:
+    """Emit additive chart overlays and return an annotated PNG so the model can see them."""
+    parsed_models: list[KlineOverlay] = []
     parsed: list[dict[str, Any]] = []
     for item in overlays or []:
         try:
-            parsed.append(KlineOverlay.model_validate(item).model_dump(mode="json"))
+            model = KlineOverlay.model_validate(item)
+            parsed_models.append(model)
+            parsed.append(model.model_dump(mode="json"))
         except Exception:
             continue
     payload = {"overlays": parsed, "additive": True}
     sink = emit or _current_emit.get()
     if sink:
         await sink("agent_chart_overlays", payload)
-    return {"ok": True, **payload}
+    image_b64 = ""
+    try:
+        candles = await oanda.get_candles(instrument or "XAU_USD", granularity or "M15", 180)
+        image_b64 = render_candles_b64(candles, f"{instrument} {granularity} annotated", parsed_models or None)
+        await publish_chart_image(sink, image_b64, title="drawing")
+    except Exception:
+        image_b64 = ""
+    result: dict[str, Any] = {"ok": True, **payload, "preview": "annotated chart attached"}
+    if image_b64:
+        result["image"] = image_b64
+    return result
 
 
 async def tool_send_recommendation(payload: dict[str, Any], emit: Emit | None = None) -> dict[str, Any]:
@@ -340,7 +413,9 @@ def mcp_tool_specs() -> list[dict[str, Any]]:
                     "overlays": {
                         "type": "array",
                         "description": "klineOverlays: rect, trendLine, fibonacci, priceLine, textAnnotation",
-                    }
+                    },
+                    "instrument": {"type": "string"},
+                    "granularity": {"type": "string"},
                 },
                 "required": ["overlays"],
             },
@@ -422,73 +497,101 @@ def mcp_tool_specs() -> list[dict[str, Any]]:
     ]
 
 
-async def dispatch_tool(name: str, args: dict[str, Any], emit: Emit | None = None) -> Any:
+async def dispatch_tool(
+    name: str,
+    args: dict[str, Any],
+    emit: Emit | None = None,
+    tool_id: str = "",
+    agent: str = "",
+) -> Any:
     if name == "get_candles":
-        return await tool_get_candles(
+        out: Any = await tool_get_candles(
             args["instrument"],
             args["granularity"],
             int(args.get("count") or 300),
         )
-    if name == "get_live_price":
-        return await tool_get_live_price(args["instrument"])
-    if name == "capture_chart_screenshot":
-        return await tool_capture_chart_screenshot(
+    elif name == "get_live_price":
+        out = await tool_get_live_price(args["instrument"])
+    elif name == "capture_chart_screenshot":
+        out = await tool_capture_chart_screenshot(
             args["instrument"],
             args["granularity"],
             int(args.get("count") or 180),
             args.get("overlays"),
         )
-    if name == "structure_scan":
-        return await tool_structure_scan(
+    elif name == "structure_scan":
+        out = await tool_structure_scan(
             args["instrument"],
             args["granularity"],
             int(args.get("count") or 300),
         )
-    if name == "send_recommendation":
+    elif name == "send_recommendation":
         payload = args.get("payload") or args
-        return await tool_send_recommendation(payload, emit)
-    if name == "calculate_ict_levels":
-        return await tool_calculate_ict_levels(
+        out = await tool_send_recommendation(payload, emit)
+    elif name == "calculate_ict_levels":
+        out = await tool_calculate_ict_levels(
             args["instrument"],
             args["granularity"],
             int(args.get("count") or 300),
         )
-    if name == "query_technical_memory":
-        return await tool_query_technical_memory(args["instrument"], args.get("query") or "")
-    if name == "query_macro_memory":
-        return await tool_query_macro_memory(args["instrument"], args.get("query") or "")
-    if name == "get_economic_calendar":
-        return await tool_get_economic_calendar(
+    elif name == "query_technical_memory":
+        out = await tool_query_technical_memory(args["instrument"], args.get("query") or "")
+    elif name == "query_macro_memory":
+        out = await tool_query_macro_memory(args["instrument"], args.get("query") or "")
+    elif name == "get_economic_calendar":
+        out = await tool_get_economic_calendar(
             args.get("instrument") or "XAU_USD",
             int(args.get("hours_ahead") or 24),
             str(args.get("min_impact") or "medium"),
         )
-    if name == "get_market_sentiment":
-        return await get_market_sentiment(args.get("instrument") or "XAU_USD")
-    if name == "fetch_financial_news":
-        return await fetch_financial_news(args.get("instrument") or "XAU_USD")
-    if name == "validate_risk_rules":
-        return await validate_risk_rules(args.get("payload") or args)
-    if name == "record_post_trade_reflection":
-        return await tool_record_post_trade_reflection(
+    elif name == "get_market_sentiment":
+        out = await get_market_sentiment(args.get("instrument") or "XAU_USD")
+    elif name == "fetch_financial_news":
+        out = await fetch_financial_news(args.get("instrument") or "XAU_USD")
+    elif name == "validate_risk_rules":
+        out = await validate_risk_rules(args.get("payload") or args)
+    elif name == "record_post_trade_reflection":
+        out = await tool_record_post_trade_reflection(
             args["recommendation_id"],
             args["outcome"],
             float(args.get("pnl") or 0.0),
         )
-    if name == "draw_on_chart":
-        return await tool_draw_on_chart(args.get("overlays") or [], emit)
-    if name == "propose_strategy":
-        return await tool_propose_strategy(args, emit)
-    if name == "validate_strategy":
-        return await tool_validate_strategy(
+    elif name == "draw_on_chart":
+        out = await tool_draw_on_chart(
+            args.get("overlays") or [],
+            emit,
+            str(args.get("instrument") or "XAU_USD"),
+            str(args.get("granularity") or "M15"),
+        )
+    elif name == "propose_strategy":
+        out = await tool_propose_strategy(args, emit)
+    elif name == "validate_strategy":
+        out = await tool_validate_strategy(
             str(args.get("strategy_id") or args.get("strategyId") or args.get("id") or ""),
             emit,
         )
-    if name == "list_strategies":
-        return await tool_list_strategies(str(args.get("status") or "active"))
-    if name == "experiment_strategy":
-        return await tool_experiment_strategy(args, emit)
-    raise ValueError(f"Unknown tool: {name}")
+    elif name == "list_strategies":
+        out = await tool_list_strategies(str(args.get("status") or "active"))
+    elif name == "experiment_strategy":
+        out = await tool_experiment_strategy(args, emit)
+    else:
+        raise ValueError(f"Unknown tool: {name}")
+    await emit_tool_result(name, out, emit=emit, tool_id=tool_id, agent=agent)
+    return out
+
+
+async def _sdk_payload(name: str, args: dict[str, Any]) -> dict[str, Any]:
+    data = await dispatch_tool(name, args)
+    public = compact_tool_output(name, data)
+    content: list[dict[str, Any]] = [{"type": "text", "text": json.dumps(public, default=str)}]
+    image = None
+    if name == "capture_chart_screenshot" and isinstance(data, str):
+        image = data
+    elif isinstance(data, dict) and isinstance(data.get("image"), str) and len(data["image"]) > 80:
+        image = data["image"]
+    if image:
+        content.insert(0, {"type": "image", "data": image, "mimeType": "image/png"})
+    return {"content": content}
 
 
 def try_build_sdk_server():
@@ -504,15 +607,11 @@ def try_build_sdk_server():
         {"instrument": str, "granularity": str, "count": int},
     )
     async def get_candles(args: dict[str, Any]) -> dict[str, Any]:
-        data = await tool_get_candles(
-            args["instrument"], args["granularity"], int(args.get("count") or 300)
-        )
-        return {"content": [{"type": "text", "text": json.dumps(data)}]}
+        return await _sdk_payload("get_candles", args)
 
     @tool("get_live_price", "Get live bid/ask/mid.", {"instrument": str})
     async def get_live_price(args: dict[str, Any]) -> dict[str, Any]:
-        data = await tool_get_live_price(args["instrument"])
-        return {"content": [{"type": "text", "text": json.dumps(data)}]}
+        return await _sdk_payload("get_live_price", args)
 
     @tool(
         "capture_chart_screenshot",
@@ -520,18 +619,7 @@ def try_build_sdk_server():
         {"instrument": str, "granularity": str, "count": int},
     )
     async def capture_chart_screenshot(args: dict[str, Any]) -> dict[str, Any]:
-        b64 = await tool_capture_chart_screenshot(
-            args["instrument"],
-            args["granularity"],
-            int(args.get("count") or 180),
-            args.get("overlays"),
-        )
-        return {
-            "content": [
-                {"type": "image", "data": b64, "mimeType": "image/png"},
-                {"type": "text", "text": "Chart snapshot captured."},
-            ]
-        }
+        return await _sdk_payload("capture_chart_screenshot", args)
 
     @tool(
         "structure_scan",
@@ -539,15 +627,11 @@ def try_build_sdk_server():
         {"instrument": str, "granularity": str, "count": int},
     )
     async def structure_scan(args: dict[str, Any]) -> dict[str, Any]:
-        data = await tool_structure_scan(
-            args["instrument"], args["granularity"], int(args.get("count") or 300)
-        )
-        return {"content": [{"type": "text", "text": json.dumps(data)}]}
+        return await _sdk_payload("structure_scan", args)
 
     @tool("send_recommendation", "Save a trade recommendation overlay payload.", {"payload": dict})
     async def send_recommendation(args: dict[str, Any]) -> dict[str, Any]:
-        data = await tool_send_recommendation(args.get("payload") or args)
-        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
+        return await _sdk_payload("send_recommendation", args)
 
     @tool(
         "calculate_ict_levels",
@@ -555,15 +639,11 @@ def try_build_sdk_server():
         {"instrument": str, "granularity": str, "count": int},
     )
     async def calculate_ict_levels_tool(args: dict[str, Any]) -> dict[str, Any]:
-        data = await tool_calculate_ict_levels(
-            args["instrument"], args["granularity"], int(args.get("count") or 300)
-        )
-        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
+        return await _sdk_payload("calculate_ict_levels", args)
 
     @tool("query_technical_memory", "Recall technical lessons.", {"instrument": str, "query": str})
     async def query_technical_memory(args: dict[str, Any]) -> dict[str, Any]:
-        data = await tool_query_technical_memory(args["instrument"], args.get("query") or "")
-        return {"content": [{"type": "text", "text": json.dumps(data)}]}
+        return await _sdk_payload("query_technical_memory", args)
 
     @tool(
         "get_economic_calendar",
@@ -571,32 +651,23 @@ def try_build_sdk_server():
         {"instrument": str, "hours_ahead": int, "min_impact": str},
     )
     async def economic_calendar(args: dict[str, Any]) -> dict[str, Any]:
-        data = await tool_get_economic_calendar(
-            args.get("instrument") or "XAU_USD",
-            int(args.get("hours_ahead") or 24),
-            str(args.get("min_impact") or "medium"),
-        )
-        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
+        return await _sdk_payload("get_economic_calendar", args)
 
     @tool("get_market_sentiment", "Live bias and session.", {"instrument": str})
     async def market_sentiment(args: dict[str, Any]) -> dict[str, Any]:
-        data = await get_market_sentiment(args.get("instrument") or "XAU_USD")
-        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
+        return await _sdk_payload("get_market_sentiment", args)
 
     @tool("fetch_financial_news", "Reuters business headlines.", {"instrument": str})
     async def financial_news(args: dict[str, Any]) -> dict[str, Any]:
-        data = await fetch_financial_news(args.get("instrument") or "XAU_USD")
-        return {"content": [{"type": "text", "text": json.dumps(data)}]}
+        return await _sdk_payload("fetch_financial_news", args)
 
     @tool("query_macro_memory", "Recall macro lessons.", {"instrument": str, "query": str})
     async def query_macro_memory(args: dict[str, Any]) -> dict[str, Any]:
-        data = await tool_query_macro_memory(args["instrument"], args.get("query") or "")
-        return {"content": [{"type": "text", "text": json.dumps(data)}]}
+        return await _sdk_payload("query_macro_memory", args)
 
     @tool("validate_risk_rules", "Enforce R:R and session gates.", {"payload": dict})
     async def validate_risk(args: dict[str, Any]) -> dict[str, Any]:
-        data = await validate_risk_rules(args.get("payload") or args)
-        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
+        return await _sdk_payload("validate_risk_rules", args)
 
     @tool(
         "draw_on_chart",
@@ -604,8 +675,7 @@ def try_build_sdk_server():
         {"overlays": list},
     )
     async def draw_on_chart(args: dict[str, Any]) -> dict[str, Any]:
-        data = await tool_draw_on_chart(args.get("overlays") or [], None)
-        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
+        return await _sdk_payload("draw_on_chart", args)
 
     @tool(
         "record_post_trade_reflection",
@@ -613,10 +683,7 @@ def try_build_sdk_server():
         {"recommendation_id": str, "outcome": str, "pnl": float},
     )
     async def record_reflection(args: dict[str, Any]) -> dict[str, Any]:
-        data = await tool_record_post_trade_reflection(
-            args["recommendation_id"], args["outcome"], float(args.get("pnl") or 0.0)
-        )
-        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
+        return await _sdk_payload("record_post_trade_reflection", args)
 
     @tool(
         "propose_strategy",
@@ -636,18 +703,15 @@ def try_build_sdk_server():
         },
     )
     async def propose_strategy(args: dict[str, Any]) -> dict[str, Any]:
-        data = await tool_propose_strategy(args)
-        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
+        return await _sdk_payload("propose_strategy", args)
 
     @tool("validate_strategy", "Backtest a drafted gold strategy on the warehouse.", {"strategy_id": str})
     async def validate_strategy(args: dict[str, Any]) -> dict[str, Any]:
-        data = await tool_validate_strategy(str(args.get("strategy_id") or args.get("id") or ""))
-        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
+        return await _sdk_payload("validate_strategy", args)
 
     @tool("list_strategies", "List gold strategies in the library.", {"status": str})
     async def list_strategies(args: dict[str, Any]) -> dict[str, Any]:
-        data = await tool_list_strategies(str(args.get("status") or "active"))
-        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
+        return await _sdk_payload("list_strategies", args)
 
     @tool(
         "experiment_strategy",
@@ -668,8 +732,7 @@ def try_build_sdk_server():
         },
     )
     async def experiment_strategy(args: dict[str, Any]) -> dict[str, Any]:
-        data = await tool_experiment_strategy(args)
-        return {"content": [{"type": "text", "text": json.dumps(data, default=str)}]}
+        return await _sdk_payload("experiment_strategy", args)
 
     return create_sdk_mcp_server(
         name="oanda",
