@@ -186,6 +186,11 @@ export const api = {
       body: JSON.stringify(body),
     }),
   deleteStrategy: (id: string) => http<{ ok: boolean; deleted?: string }>(`/api/strategies/${id}`, { method: "DELETE" }),
+  lintStrategyCode: (code: string) =>
+    http<{ ok: boolean; error?: string | null }>("/api/strategies/lint-code", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
   validateStrategy: (id: string, body?: Record<string, unknown>) =>
     http<import("./types").StrategyValidation>(`/api/strategies/${id}/validate`, {
       method: "POST",

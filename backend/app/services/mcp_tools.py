@@ -358,6 +358,8 @@ def mcp_tool_specs() -> list[dict[str, Any]]:
                     "entry_conditions": {"type": "object"},
                     "sessions": {"type": "array", "items": {"type": "string"}},
                     "dsl": {"type": "object"},
+                    "kind": {"type": "string", "enum": ["dsl", "python"], "description": "dsl (default) or python code strategy"},
+                    "code": {"type": "string", "description": "Python code defining on_bar(ctx) — required when kind=python"},
                     "stop_rule": {"type": "string"},
                     "tp1_r": {"type": "number"},
                     "tp2_r": {"type": "number"},
@@ -622,6 +624,8 @@ def try_build_sdk_server():
         {
             "name": str,
             "description": str,
+            "kind": str,
+            "code": str,
             "timeframes": list,
             "direction": str,
             "entry_conditions": dict,

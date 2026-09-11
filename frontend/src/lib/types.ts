@@ -101,6 +101,8 @@ export type StrategyRule = {
   entry_conditions: Record<string, unknown>;
   sessions?: string[];
   dsl?: Record<string, unknown>;
+  kind?: "dsl" | "python";
+  code?: string;
   pinned?: boolean;
   stop_rule: string;
   tp1_r: number;

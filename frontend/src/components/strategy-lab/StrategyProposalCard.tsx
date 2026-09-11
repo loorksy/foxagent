@@ -25,7 +25,12 @@ export function StrategyProposalCard({
     <div data-testid="strategy-proposal-card" className="mt-2 space-y-3 rounded-xl border border-border bg-card p-3 text-sm">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t("lab.chatProposal")}</p>
       <div>
-        <p className="font-semibold">{rule.name}</p>
+        <p className="flex flex-wrap items-center gap-2 font-semibold">
+          {rule.name}
+          {rule.kind === "python" ? (
+            <span className="rounded-full border border-info/40 bg-info/10 px-2 py-0.5 text-[11px] font-semibold text-info">{t("lab.codeBadge")}</span>
+          ) : null}
+        </p>
         <p className="mt-1 text-muted-foreground">{rule.description}</p>
         <p className="mt-1 font-mono text-[11px] text-muted-foreground" dir="ltr">
           {rule.id} · {(rule.timeframes || []).join(" ")} · {t(`lab.status.${rule.status}` as MessageKey)}

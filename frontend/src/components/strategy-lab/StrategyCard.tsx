@@ -40,6 +40,9 @@ export function StrategyCard({ rule, compact = false }: { rule: StrategyRule; co
             {t(statusKey)}
           </span>
           <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">{t(sourceKey)}</span>
+          {rule.kind === "python" ? (
+            <span className="rounded-full border border-info/40 bg-info/10 px-2 py-0.5 text-[11px] font-semibold text-info">{t("lab.codeBadge")}</span>
+          ) : null}
         </div>
       </div>
       {!compact && rule.description ? <p className="mt-2 text-muted-foreground">{rule.description}</p> : null}

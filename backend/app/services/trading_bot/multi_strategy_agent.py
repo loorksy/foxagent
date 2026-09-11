@@ -243,6 +243,61 @@ def build_rule_signal(rule: Any, candles: list[OHLCV], report: StructureReport, 
     )
 
 
+async def build_code_signal(rule: Any, candles: list[OHLCV], timeframe: str) -> dict[str, Any] | None:
+    """Python-kind strategy: run the sandboxed code once on the latest window
+    and emit a signal only if it fired on the LAST bar. Real candles only."""
+    import asyncio
+
+    from app.services.trading_bot.code_runner import run_code_on_window
+
+    if not candles:
+        return None
+    klines = [c.to_kline() for c in candles]
+    params = {
+        "timeframe": timeframe,
+        "direction": getattr(rule, "direction", "both"),
+        "tp1_r": float(getattr(rule, "tp1_r", 1.5) or 1.5),
+        "tp2_r": float(getattr(rule, "tp2_r", 3.0) or 3.0),
+        "max_holding_bars": int(getattr(rule, "max_holding_bars", 48) or 48),
+    }
+    sig = await asyncio.to_thread(run_code_on_window, getattr(rule, "code", ""), klines, params)
+    if not sig:
+        return None
+    side = "buy" if str(sig.get("action")) == "BUY" else "sell"
+    direction = getattr(rule, "direction", "both")
+    if direction in {"buy", "sell"} and side != direction:
+        return None
+    entry = float(sig.get("entry") or 0.0)
+    stop = float(sig.get("stopLoss") or 0.0)
+    if entry <= 0 or (side == "buy" and stop >= entry) or (side == "sell" and stop <= entry):
+        return None
+    risk = abs(entry - stop)
+    tp1 = float(sig.get("tp1") or 0.0)
+    if (side == "buy" and tp1 <= entry) or (side == "sell" and tp1 >= entry):
+        tp1 = entry + params["tp1_r"] * risk if side == "buy" else entry - params["tp1_r"] * risk
+    tp2_raw = sig.get("tp2")
+    if tp2_raw is None:
+        tp2 = entry + params["tp2_r"] * risk if side == "buy" else entry - params["tp2_r"] * risk
+    else:
+        tp2 = float(tp2_raw)
+        if (side == "buy" and tp2 <= entry) or (side == "sell" and tp2 >= entry):
+            tp2 = entry + params["tp2_r"] * risk if side == "buy" else entry - params["tp2_r"] * risk
+    rr = abs(tp2 - entry) / risk if risk > 0 else 0.0
+    return signal_payload(
+        agent_type="multi_strategy",
+        strategy_id=getattr(rule, "id", "custom"),
+        timeframe=timeframe,
+        signal_type=side,
+        entry=round(entry, 3),
+        stop=round(stop, 3),
+        tp1=round(tp1, 3),
+        tp2=round(tp2, 3),
+        confidence=0.6,
+        risk_reward=round(rr, 2),
+        extra={"kind": "python", "note": str(sig.get("note") or ""), "source": getattr(rule, "source", "")},
+    )
+
+
 def build_strategy_signal(
     strategy_id: str,
     candles: list[OHLCV],
@@ -316,8 +371,11 @@ class MultiStrategyAgent:
                 candles = await self._candles(tf)
                 if len(candles) < 20:
                     continue
-                report = analyze_structure(candles)
-                sig = build_rule_signal(rule, candles, report, tf)
+                if getattr(rule, "kind", "dsl") == "python":
+                    sig = await build_code_signal(rule, candles, tf)
+                else:
+                    report = analyze_structure(candles)
+                    sig = build_rule_signal(rule, candles, report, tf)
                 if not sig:
                     continue
                 key = f"{rule.id}:{tf}:{sig['signalType']}"

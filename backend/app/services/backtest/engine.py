@@ -288,6 +288,8 @@ class BacktestEngine:
         series.sort(key=lambda c: c.timestamp)
         wanted_rules = await _resolve_rules(tf, strategy_id, rule)
         wanted = [r.id for r in wanted_rules]
+        dsl_rules = [r for r in wanted_rules if getattr(r, "kind", "dsl") != "python"]
+        python_rules = [r for r in wanted_rules if getattr(r, "kind", "dsl") == "python"]
         trades: list[BacktestTrade] = []
         busy_until: dict[str, int] = {}
         start = min(LOOKBACK, max(20, len(series) // 4))
@@ -296,7 +298,7 @@ class BacktestEngine:
             if len(window) < 20:
                 continue
             report = analyze_structure(window)
-            for item in wanted_rules:
+            for item in dsl_rules:
                 sid = item.id
                 if i <= busy_until.get(sid, -1):
                     continue
@@ -354,6 +356,12 @@ class BacktestEngine:
                 trades.append(trade)
                 busy_until[sid] = i + int(sim["barsHeld"])
 
+        for item in python_rules:
+            trades.extend(
+                await self._python_trades(item, series, tf, min_rr=min_rr, risk_percent=risk_percent)
+            )
+        trades.sort(key=lambda t: _aware(t.entryTime))
+
         wins = sum(1 for t in trades if t.pnlR > 0)
         losses = sum(1 for t in trades if t.pnlR <= 0)
         total_r = round(sum(t.pnlR for t in trades), 4)
@@ -385,6 +393,111 @@ class BacktestEngine:
             saved = await save_report(report_out)
             report_out.id = saved.get("id") or report_out.id
         return report_out
+
+    async def _python_trades(
+        self,
+        item: Any,
+        series: list[OHLCV],
+        tf: str,
+        *,
+        min_rr: float,
+        risk_percent: float,
+    ) -> list[BacktestTrade]:
+        """Trades for a python-kind strategy. Signals come from the sandbox in
+        ONE subprocess call; fills/exits reuse the exact DSL semantics
+        (next-bar-open fill with slippage, simulate_trade, R accounting)."""
+        import asyncio
+
+        from app.services.trading_bot.code_runner import run_code_backtest
+
+        if len(series) < 2:
+            return []
+        klines = [c.to_kline() for c in series]
+        params = {
+            "timeframe": tf,
+            "direction": getattr(item, "direction", "both"),
+            "tp1_r": float(getattr(item, "tp1_r", 1.5) or 1.5),
+            "tp2_r": float(getattr(item, "tp2_r", 3.0) or 3.0),
+            "max_holding_bars": int(getattr(item, "max_holding_bars", 48) or 48),
+        }
+        result = await asyncio.to_thread(run_code_backtest, getattr(item, "code", ""), klines, params)
+        if not result.get("ok"):
+            return []
+        out: list[BacktestTrade] = []
+        busy_until = -1
+        for sig in result.get("signals") or []:
+            i = int(sig.get("index", -1))
+            if i < 0 or i + 1 >= len(series) or i <= busy_until:
+                continue
+            side = "buy" if str(sig.get("action")) == "BUY" else "sell"
+            direction = getattr(item, "direction", "both")
+            if direction in {"buy", "sell"} and side != direction:
+                continue
+            nxt = series[i + 1]
+            fill = apply_slippage(side, nxt.open)
+            window = series[max(0, i - LOOKBACK + 1) : i + 1]
+            stop = float(sig.get("stopLoss") or 0.0)
+            if side == "buy" and stop >= fill:
+                stop = fill - max(atr(window) * 0.35, 0.2)
+            if side == "sell" and stop <= fill:
+                stop = fill + max(atr(window) * 0.35, 0.2)
+            risk_est = abs(fill - stop)
+            if risk_est <= 0:
+                risk_est = max(abs(fill) * 0.001, 0.05)
+            tp1_px = float(sig.get("tp1") or 0.0)
+            tp1_r = abs(tp1_px - fill) / risk_est
+            if tp1_r <= 0 or (side == "buy" and tp1_px <= fill) or (side == "sell" and tp1_px >= fill):
+                tp1_r = float(getattr(item, "tp1_r", 1.5) or 1.5)
+            tp2_raw = sig.get("tp2")
+            if tp2_raw is None:
+                tp2_r = float(getattr(item, "tp2_r", 3.0) or 3.0)
+            else:
+                tp2_px = float(tp2_raw)
+                tp2_r = abs(tp2_px - fill) / risk_est
+                if tp2_r <= 0 or (side == "buy" and tp2_px <= fill) or (side == "sell" and tp2_px >= fill):
+                    tp2_r = float(getattr(item, "tp2_r", 3.0) or 3.0)
+            tp2_r = max(tp2_r, tp1_r)
+            if tp2_r + 1e-9 < min_rr:
+                continue
+            tp1, tp2, risk = r_targets(fill, stop, side, tp1_r, tp2_r)
+            if risk / max(abs(fill), 1.0) * 100.0 > max(risk_percent, 0.05) * 20:
+                if abs(fill - stop) / max(abs(fill), 1.0) > 0.05:
+                    continue
+            hold = int(getattr(item, "max_holding_bars", 48) or 48)
+            path = series[i + 1 : i + 1 + hold]
+            if not path:
+                continue
+            sim = simulate_trade(
+                side=side,
+                entry=fill,
+                stop=stop,
+                tp1=tp1,
+                tp2=tp2,
+                tp1_r=tp1_r,
+                tp2_r=tp2_r,
+                bars=path,
+                max_holding_bars=hold,
+            )
+            exit_time = sim["exitTime"] or path[-1].time
+            out.append(
+                BacktestTrade(
+                    strategyId=item.id,
+                    timeframe=tf,
+                    entryTime=_aware(nxt.time),
+                    exitTime=_aware(exit_time),
+                    direction=side,  # type: ignore[arg-type]
+                    entryPrice=round(fill, 3),
+                    stopLoss=round(stop, 3),
+                    takeProfit1=round(tp1, 3),
+                    takeProfit2=round(tp2, 3),
+                    exitPrice=sim["exitPrice"],
+                    pnlR=sim["pnlR"],
+                    pnlPercent=round(sim["pnlR"] * risk_percent, 4),
+                    exitReason=sim["exitReason"],
+                )
+            )
+            busy_until = i + int(sim["barsHeld"])
+        return out
 
 
 def _group_session(trades: list[BacktestTrade]) -> dict[str, dict[str, Any]]:

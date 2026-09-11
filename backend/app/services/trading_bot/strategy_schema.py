@@ -89,6 +89,8 @@ class StrategyRule(BaseModel):
     entry_conditions: dict[str, Any] = Field(default_factory=dict)
     sessions: list[str] = Field(default_factory=lambda: list(SESSIONS))
     dsl: dict[str, Any] = Field(default_factory=dict)
+    kind: Literal["dsl", "python"] = "dsl"
+    code: str = ""
     pinned: bool = False
     stop_rule: str = "swing ± ATR"
     tp1_r: float = 1.5
