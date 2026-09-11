@@ -16,19 +16,48 @@ import { useT, type MessageKey } from "@/i18n";
 const FOCUS =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1";
 
-const NAV: { href: string; match: string; labelKey: MessageKey; icon: typeof MessageSquareText }[] = [
-  { href: "/agents", match: "/agents", labelKey: "nav.chat", icon: MessageSquareText },
-  { href: "/recommendations", match: "/recommendations", labelKey: "nav.recommendations", icon: LineChart },
-  { href: "/memory", match: "/memory", labelKey: "nav.memory", icon: Brain },
-  { href: "/calendar", match: "/calendar", labelKey: "nav.calendar", icon: CalendarDays },
-  { href: "/inbox", match: "/inbox", labelKey: "nav.inbox", icon: Inbox },
-  { href: "/bots", match: "/bots", labelKey: "nav.bot", icon: Bot },
-  { href: "/scans", match: "/scans", labelKey: "nav.scans", icon: ListTree },
-  { href: "/briefing", match: "/briefing", labelKey: "nav.briefing", icon: Newspaper },
-  { href: "/journal", match: "/journal", labelKey: "nav.journal", icon: Notebook },
-  { href: "/backtest", match: "/backtest", labelKey: "nav.backtest", icon: FlaskConical },
-  { href: "/strategy-lab", match: "/strategy-lab", labelKey: "nav.strategyLab", icon: Library },
-  { href: "/settings", match: "/settings", labelKey: "nav.settings", icon: Settings },
+type NavItem = { href: string; match: string; labelKey: MessageKey; icon: typeof MessageSquareText };
+type NavGroup = { labelKey: MessageKey | null; items: NavItem[] };
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    labelKey: null,
+    items: [{ href: "/agents", match: "/agents", labelKey: "nav.chat", icon: MessageSquareText }],
+  },
+  {
+    labelKey: "navGroup.trading",
+    items: [
+      { href: "/recommendations", match: "/recommendations", labelKey: "nav.recommendations", icon: LineChart },
+      { href: "/inbox", match: "/inbox", labelKey: "nav.inbox", icon: Inbox },
+      { href: "/journal", match: "/journal", labelKey: "nav.journal", icon: Notebook },
+    ],
+  },
+  {
+    labelKey: "navGroup.automation",
+    items: [
+      { href: "/bots", match: "/bots", labelKey: "nav.bot", icon: Bot },
+      { href: "/scans", match: "/scans", labelKey: "nav.scans", icon: ListTree },
+    ],
+  },
+  {
+    labelKey: "navGroup.lab",
+    items: [
+      { href: "/strategy-lab", match: "/strategy-lab", labelKey: "nav.strategyLab", icon: Library },
+      { href: "/backtest", match: "/backtest", labelKey: "nav.backtest", icon: FlaskConical },
+    ],
+  },
+  {
+    labelKey: "navGroup.market",
+    items: [
+      { href: "/calendar", match: "/calendar", labelKey: "nav.calendar", icon: CalendarDays },
+      { href: "/briefing", match: "/briefing", labelKey: "nav.briefing", icon: Newspaper },
+      { href: "/memory", match: "/memory", labelKey: "nav.memory", icon: Brain },
+    ],
+  },
+  {
+    labelKey: null,
+    items: [{ href: "/settings", match: "/settings", labelKey: "nav.settings", icon: Settings }],
+  },
 ];
 
 function NavList({ iconOnly, onNavigate }: { iconOnly: boolean; onNavigate?: () => void }) {
@@ -40,36 +69,45 @@ function NavList({ iconOnly, onNavigate }: { iconOnly: boolean; onNavigate?: () 
   const inboxOpen = useInbox((s) => s.counts.open);
   return (
     <nav className="flex shrink-0 flex-col gap-0.5 px-2 py-2" aria-label={t("nav.aria")}>
-      {NAV.map((item) => {
-        const Icon = item.icon;
-        const href = item.match === "/agents" && activeId ? `/agents/${activeId}` : item.href;
-        const active = pathname.startsWith(item.match);
-        const label = t(item.labelKey);
-        return (
-          <Link
-            key={item.href}
-            href={href}
-            onClick={() => onNavigate?.()}
-            title={iconOnly ? label : undefined}
-            className={cn(
-              "relative flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors lg:min-h-10",
-              item.href === "/inbox" && !iconOnly && "pe-2",
-              FOCUS,
-              iconOnly && "justify-center px-0",
-              active ? "bg-[var(--sidebar-active-bg)] text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-          >
-            {active && <span className="absolute inset-y-2 start-0 w-0.5 rounded-full bg-foreground" />}
-            <Icon className={cn("shrink-0", iconOnly ? "h-5 w-5" : "h-4 w-4")} />
-            {!iconOnly && <span className="truncate">{label}</span>}
-            {item.href === "/inbox" && inboxOpen > 0 ? (
-              <span className={cn("ms-auto rounded-full bg-foreground px-1.5 text-[10px] font-semibold leading-5 text-background", iconOnly && "absolute end-0.5 top-1 ms-0")}>
-                {inboxOpen > 9 ? "9+" : inboxOpen}
-              </span>
-            ) : null}
-          </Link>
-        );
-      })}
+      {NAV_GROUPS.map((group, gi) => (
+        <div key={gi} className={cn(!iconOnly && gi > 0 && "mt-1.5")}>
+          {group.labelKey && !iconOnly && (
+            <p className="px-3 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+              {t(group.labelKey)}
+            </p>
+          )}
+          {group.items.map((item) => {
+            const Icon = item.icon;
+            const href = item.match === "/agents" && activeId ? `/agents/${activeId}` : item.href;
+            const active = pathname.startsWith(item.match);
+            const label = t(item.labelKey);
+            return (
+              <Link
+                key={item.href}
+                href={href}
+                onClick={() => onNavigate?.()}
+                title={iconOnly ? label : undefined}
+                className={cn(
+                  "relative flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors lg:min-h-10",
+                  item.href === "/inbox" && !iconOnly && "pe-2",
+                  FOCUS,
+                  iconOnly && "justify-center px-0",
+                  active ? "bg-[var(--sidebar-active-bg)] text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+              >
+                {active && <span className="absolute inset-y-2 start-0 w-0.5 rounded-full bg-foreground" />}
+                <Icon className={cn("shrink-0", iconOnly ? "h-5 w-5" : "h-4 w-4")} />
+                {!iconOnly && <span className="truncate">{label}</span>}
+                {item.href === "/inbox" && inboxOpen > 0 ? (
+                  <span className={cn("ms-auto rounded-full bg-foreground px-1.5 text-[10px] font-semibold leading-5 text-background", iconOnly && "absolute end-0.5 top-1 ms-0")}>
+                    {inboxOpen > 9 ? "9+" : inboxOpen}
+                  </span>
+                ) : null}
+              </Link>
+            );
+          })}
+        </div>
+      ))}
       {hasArtifacts && (
         <button
           type="button"
