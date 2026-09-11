@@ -144,11 +144,22 @@ export async function sendAgentMessage(raw: string) {
             id: String(p.id || p.name || ""),
             agent: String(p.agent || ""),
             name: String(p.name || ""),
+            label: p.label ? String(p.label) : undefined,
             input: p.input,
           });
         }
         if (type === "agent_tool_result") {
-          useChat.getState().upsertToolResult(String(p.id || ""), p.output);
+          useChat.getState().upsertToolResult(String(p.id || ""), p.output, p.name ? String(p.name) : undefined);
+        }
+        if (type === "agent_image" && (p.url || p.data)) {
+          const src = p.url
+            ? String(p.url)
+            : `data:${p.mime || "image/png"};base64,${p.data}`;
+          useChat.getState().attachImage({
+            id: String(p.id || `img_${Date.now()}`),
+            src,
+            caption: p.title ? String(p.title) : undefined,
+          });
         }
         if (type === "agent_debate_message" && p.text) {
           useChat.getState().addDebate({

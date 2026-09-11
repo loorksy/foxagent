@@ -4,7 +4,7 @@ import asyncio
 import json
 
 from fastapi import APIRouter, Body, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from app.config import get_settings
 from app.db import list_recommendations, update_recommendation
@@ -247,6 +247,16 @@ async def mt5_status() -> dict:
     from app.services.metaapi import get_status
 
     return await get_status()
+
+
+@router.get("/agent/images/{shot_id}")
+async def agent_chart_image(shot_id: str):
+    from app.services.chart_shots import shot_path
+
+    path = shot_path(shot_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Image not found")
+    return FileResponse(path, media_type="image/png")
 
 
 @router.post("/agent/chat")

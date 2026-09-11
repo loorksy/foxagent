@@ -19,6 +19,7 @@ type WorkspaceState = {
   dataMode: "oanda" | "simulator";
   chartNonce: number;
   chartOpen: boolean;
+  overlays: KlineOverlay[];
   command: ChartCommand | null;
   setChartOpen: (open: boolean) => void;
   toggleChart: () => void;
@@ -40,6 +41,7 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
   dataMode: "simulator",
   chartNonce: 0,
   chartOpen: false,
+  overlays: [],
   command: null,
   setChartOpen: (chartOpen) => set({ chartOpen }),
   toggleChart: () => set((s) => ({ chartOpen: !s.chartOpen })),
@@ -55,14 +57,16 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
   setDataMode: (dataMode) => set({ dataMode }),
   applyToChart: (overlays, focusTimestamp, recId) =>
     set({
+      overlays,
       command: { type: "apply", overlays, focusTimestamp, recId },
       chartOpen: true,
     }),
   appendToChart: (overlays) =>
-    set({
+    set((s) => ({
+      overlays: [...s.overlays, ...overlays],
       command: { type: "append", overlays },
       chartOpen: true,
-    }),
-  clearOverlays: () => set({ command: { type: "clear" } }),
+    })),
+  clearOverlays: () => set({ overlays: [], command: { type: "clear" } }),
   focusTimestamp: (timestamp) => set({ command: { type: "focus", timestamp }, chartOpen: true }),
 }));

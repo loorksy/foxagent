@@ -70,7 +70,7 @@ function ToolStep({ step }: { step: RunStep }) {
       >
         <Wrench className="h-3 w-3 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate">
-          <span className="text-muted-foreground">{step.agent}</span> · {step.toolName}
+          {step.toolLabel || step.text || step.toolName}
         </span>
         {done ? (
           <Check className="h-3 w-3 shrink-0 text-success" />
@@ -201,9 +201,9 @@ export function ChatReasoning() {
         <>
           <LiveThinkingCard steps={steps} />
           {latestTool && (
-            <p className="mt-1.5 flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+            <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <Wrench className="h-3 w-3" />
-              {latestTool.agent} · {latestTool.toolName}
+              <span className="min-w-0 truncate">{latestTool.toolLabel || latestTool.toolName}</span>
               {latestTool.toolOutput != null ? <Check className="h-3 w-3 text-success" /> : <Loader2 className="h-3 w-3 animate-spin" />}
             </p>
           )}

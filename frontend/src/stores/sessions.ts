@@ -124,13 +124,13 @@ export const useSessions = create<SessionsState>((set, get) => ({
     const next = sessions.map((s) => (s.id === activeId ? { ...s, title, updatedAt: Date.now() } : s));
     set({ sessions: next });
     const chat = useChat.getState();
-    const command = useWorkspace.getState().command;
+    const overlays = useWorkspace.getState().overlays;
     void api
       .saveSession(activeId, {
         title,
         state: {
           artifacts: chat.artifacts,
-          overlays: command?.type === "apply" ? command.overlays : [],
+          overlays,
           recommendationId: messages.find((m) => m.recommendationId)?.recommendationId || null,
         },
       })
