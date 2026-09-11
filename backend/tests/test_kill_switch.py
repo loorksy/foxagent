@@ -47,7 +47,7 @@ async def test_pause_then_resume_allows_run(monkeypatch):
     await set_paused(False)
 
     async def fake_crew(req, emit, run_id, api_key, session_id):
-        return None
+        return None, "no setup"
 
     async def key(_explicit: str = "") -> str:
         return "sk-test"

@@ -36,8 +36,8 @@ _STRAT_RE = re.compile(
     re.I,
 )
 _ANALYSIS_RE = re.compile(
-    r"(حلل|حلّل|تحليل|اتجاه|الاتجاه|هيكل|سيولة|مناطق|دعم|مقاومة|أخبار|اخبار|تقويم|السوق|الذهب|السعر|شارت|شمعة|جلسة|"
-    r"analy|trend|structure|bias|liquidity|\bfvg\b|order block|\bpoi\b|price|chart|candle|session|news|calendar|market)",
+    r"(حلل|حلّل|تحليل|اتجاه|الاتجاه|هيكل|سيولة|مناطق|دعم|مقاومة|أخبار|اخبار|تقويم|السوق|الذهب|السعر|شارت|شمعة|جلسة|مسح|امسح|"
+    r"analy|trend|structure|bias|liquidity|\bfvg\b|order block|\bpoi\b|price|chart|candle|session|news|calendar|market|\bscan\b)",
     re.I,
 )
 MACRO_RE = re.compile(
@@ -76,6 +76,8 @@ def heuristic_intent(message: str) -> str | None:
         return INTENT_RECOMMENDATION
     if hits == [INTENT_STRATEGY]:
         return INTENT_STRATEGY
+    if hits == [INTENT_ANALYSIS]:
+        return INTENT_ANALYSIS
     if not hits and len(text) <= 120:
         return INTENT_CHAT
     return None

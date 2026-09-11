@@ -23,6 +23,7 @@ type SessionsState = {
   hydrate: () => Promise<void>;
   setQuery: (query: string) => void;
   setActiveId: (id: string | null) => void;
+  adoptSession: (id: string) => void;
   openSession: (id: string) => Promise<void>;
   ensureSession: (id: string) => Promise<AgentSession>;
   removeChat: (id: string) => Promise<void>;
@@ -60,6 +61,27 @@ export const useSessions = create<SessionsState>((set, get) => ({
   },
   setQuery: (query) => set({ query }),
   setActiveId: (activeId) => set({ activeId }),
+  adoptSession: (id) => {
+    const ws = useWorkspace.getState();
+    set((s) => ({
+      activeId: id,
+      sessions: s.sessions.some((x) => x.id === id)
+        ? s.sessions
+        : [
+            {
+              id,
+              title: t("chats.untitled"),
+              updatedAt: Date.now(),
+              symbol: ws.symbol,
+              timeframe: ws.period.text,
+            },
+            ...s.sessions,
+          ],
+    }));
+    if (typeof window !== "undefined" && !window.location.pathname.includes(id)) {
+      window.history.replaceState(null, "", `/agents/${id}`);
+    }
+  },
   openSession: async (id) => {
     const item = await get().ensureSession(id);
     useChat.getState().hydrateFromSession(item);

@@ -59,6 +59,13 @@ export type TradeRecommendation = {
   model?: string | null;
   visionNotes?: string | null;
   focusTimestamp?: number | null;
+  analysis?: {
+    technical?: string;
+    fundamental?: string;
+    bull?: string;
+    bear?: string;
+    risk?: string;
+  } | null;
 };
 
 export type KLineBar = {
@@ -208,6 +215,20 @@ export type RunThought = {
   agent: string;
   text: string;
   channel?: string;
+};
+
+export type RunStep = {
+  kind: "thought" | "tool" | "debate" | "recall" | "intent";
+  agent?: string;
+  text?: string;
+  channel?: string;
+  toolId?: string;
+  toolName?: string;
+  toolInput?: unknown;
+  toolOutput?: unknown;
+  role?: string;
+  intent?: string;
+  at: number;
 };
 
 export type RunTool = {

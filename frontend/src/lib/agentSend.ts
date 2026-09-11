@@ -106,7 +106,13 @@ export async function sendAgentMessage(raw: string) {
       (event) => {
         const p = event.payload || {};
         const type = event.type;
-        if (type === "run_start" && p.runId) useChat.setState({ runId: String(p.runId) });
+        if (type === "run_start" && p.runId) {
+          useChat.setState({ runId: String(p.runId) });
+          const sid = p.sessionId ? String(p.sessionId) : null;
+          if (sid && !useSessions.getState().activeId) {
+            useSessions.getState().adoptSession(sid);
+          }
+        }
         if (type === "usage" || (type === "run_complete" && p.usage && typeof p.usage === "object")) {
           const raw = (type === "usage" ? p : p.usage) as Record<string, unknown>;
           useChat.getState().applyUsage({
@@ -126,7 +132,12 @@ export async function sendAgentMessage(raw: string) {
         if ((type === "agent_thought" || type === "thought" || type === "token") && (p.delta || p.text)) {
           const tok = String(p.delta || p.text);
           useChat.getState().appendThought(String(p.agent || "agent"), tok, p.channel ? String(p.channel) : undefined);
-          if (p.channel === "text" || type === "token") useChat.getState().appendToken(tok);
+          // Only the desk's final voice streams into the visible bubble; internal
+          // agent briefs stay inside the reasoning timeline.
+          if (p.final === true || type === "token") useChat.getState().appendToken(tok);
+        }
+        if (type === "agent_intent" && p.intent) {
+          useChat.getState().setIntent(String(p.intent));
         }
         if (type === "agent_tool_call") {
           useChat.getState().upsertToolCall({

@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { AgentAvatar } from "./AgentAvatar";
 import { ChatComposer } from "./ChatComposer";
-import { ChatThinking } from "./ChatThinking";
+import { ChatReasoning } from "./ChatReasoning";
 import { ChatUsageMeter } from "./ChatUsageMeter";
 import { RecommendationCard } from "./RecommendationCard";
 import { StrategyProposalCard } from "@/components/strategy-lab/StrategyProposalCard";
@@ -20,8 +20,7 @@ import { useT } from "@/i18n";
 export function ChatPanel() {
   const messages = useChat((s) => s.messages);
   const streaming = useChat((s) => s.streaming);
-  const thoughts = useChat((s) => s.thoughts);
-  const debate = useChat((s) => s.debate);
+  const steps = useChat((s) => s.steps);
   const highlight = useChat((s) => s.highlight);
   const runUsage = useChat((s) => s.runUsage);
   const recs = useRecommendations((s) => s.items);
@@ -57,7 +56,7 @@ export function ChatPanel() {
     };
   }, [isHero]);
 
-  const showInspector = streaming || thoughts.length > 0 || debate.length > 0;
+  const showInspector = streaming || steps.length > 0;
 
   return (
     <div className="flex h-full min-w-0 flex-1">
@@ -109,7 +108,7 @@ export function ChatPanel() {
                       <AgentAvatar thinking={Boolean(m.streaming)} />
                       <div className="min-w-0 flex-1">
                         {m.streaming || (showInspector && m.id === messages.filter((x) => x.role === "assistant").at(-1)?.id) ? (
-                          <ChatThinking />
+                          <ChatReasoning />
                         ) : null}
                         {m.streaming && m.text ? (
                           <p className="whitespace-pre-wrap py-0.5 leading-7">
