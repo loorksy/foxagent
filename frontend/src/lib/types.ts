@@ -313,6 +313,9 @@ export type SettingsPublic = {
   telegramChatId: string;
   enableTelegramNotifications: boolean;
   telegramConfigured: boolean;
+  metaapiTokenSet?: boolean;
+  metaapiAccountId?: string;
+  metaapiConfigured?: boolean;
   botEnabled?: boolean;
   botScanInterval?: number;
   botAgents?: string[];
@@ -336,6 +339,8 @@ export type SettingsPayload = {
   telegramBotToken: string;
   telegramChatId: string;
   enableTelegramNotifications: boolean;
+  metaapiToken?: string;
+  metaapiAccountId?: string;
   botEnabled?: boolean;
   botScanInterval?: number;
   botAgents?: string[];

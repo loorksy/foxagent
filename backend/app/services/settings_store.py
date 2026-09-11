@@ -103,6 +103,8 @@ async def load_runtime_settings() -> SettingsPayload:
         enableTelegramNotifications=(
             stored.enableTelegramNotifications if raw else env.enable_telegram_notifications
         ),
+        metaapiToken=stored.metaapiToken or env.metaapi_token,
+        metaapiAccountId=stored.metaapiAccountId or env.metaapi_account_id,
         botEnabled=stored.botEnabled,
         botScanInterval=stored.botScanInterval or 60,
         botAgents=stored.botAgents or ["multi_strategy", "pattern_notes", "news_candle"],
@@ -136,6 +138,8 @@ def apply_runtime_to_env(payload: SettingsPayload) -> None:
     env.telegram_bot_token = payload.telegramBotToken
     env.telegram_chat_id = payload.telegramChatId
     env.enable_telegram_notifications = payload.enableTelegramNotifications
+    env.metaapi_token = payload.metaapiToken
+    env.metaapi_account_id = payload.metaapiAccountId
 
 
 async def save_runtime_settings(payload: SettingsPayload) -> SettingsPublic:
@@ -146,6 +150,8 @@ async def save_runtime_settings(payload: SettingsPayload) -> SettingsPublic:
         payload.oandaApiToken = current.oandaApiToken
     if not payload.telegramBotToken:
         payload.telegramBotToken = current.telegramBotToken
+    if not payload.metaapiToken:
+        payload.metaapiToken = current.metaapiToken
     token = _fernet().encrypt(payload.model_dump_json().encode()).decode()
     await kv_set(SETTINGS_KV, token)
     apply_runtime_to_env(payload)
@@ -172,6 +178,9 @@ def to_public(payload: SettingsPayload) -> SettingsPublic:
         telegramChatId=payload.telegramChatId,
         enableTelegramNotifications=payload.enableTelegramNotifications,
         telegramConfigured=bool(payload.telegramBotToken and payload.telegramChatId),
+        metaapiTokenSet=bool(payload.metaapiToken),
+        metaapiAccountId=payload.metaapiAccountId,
+        metaapiConfigured=bool(payload.metaapiToken and payload.metaapiAccountId),
         botEnabled=payload.botEnabled,
         botScanInterval=payload.botScanInterval,
         botAgents=payload.botAgents,

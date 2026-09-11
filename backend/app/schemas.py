@@ -196,6 +196,8 @@ class SettingsPayload(BaseModel):
     telegramBotToken: str = ""
     telegramChatId: str = ""
     enableTelegramNotifications: bool = False
+    metaapiToken: str = ""
+    metaapiAccountId: str = ""
     botEnabled: bool = False
     botScanInterval: int = 60
     botAgents: list[str] = Field(default_factory=lambda: ["multi_strategy", "pattern_notes", "news_candle"])
@@ -231,6 +233,9 @@ class SettingsPublic(BaseModel):
     telegramChatId: str = ""
     enableTelegramNotifications: bool = False
     telegramConfigured: bool = False
+    metaapiTokenSet: bool = False
+    metaapiAccountId: str = ""
+    metaapiConfigured: bool = False
     botEnabled: bool = False
     botScanInterval: int = 60
     botAgents: list[str] = Field(default_factory=list)

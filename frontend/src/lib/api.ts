@@ -70,7 +70,29 @@ export const api = {
   saveSettings: (body: SettingsPayload) =>
     http<SettingsPublic>("/api/settings", { method: "PUT", body: JSON.stringify(body) }),
   validateSettings: (body: Record<string, unknown>) =>
-    http<{ ok: boolean; detail: string; keyValid?: boolean }>("/api/settings/validate", { method: "POST", body: JSON.stringify(body) }),
+    http<{
+      ok: boolean;
+      detail: string;
+      keyValid?: boolean;
+      connected?: boolean;
+      configured?: boolean;
+      balance?: number | null;
+      currency?: string;
+    }>(
+      "/api/settings/validate",
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+  mt5Status: () =>
+    http<{
+      connected: boolean;
+      configured?: boolean;
+      state?: string;
+      accountName?: string;
+      balance?: number | null;
+      equity?: number | null;
+      currency?: string;
+      detail?: string;
+    }>("/api/mt5/status"),
   prices: () => http<{ prices: import("./types").LivePrice[] }>("/api/prices"),
   sessions: () => http<{ sessions: AgentSession[] }>("/api/sessions"),
   createSession: (body?: { id?: string; symbol?: string; timeframe?: string; title?: string }) =>

@@ -232,7 +232,21 @@ async def settings_validate(body: dict) -> dict:
         token = body.get("telegramBotToken") or runtime.telegramBotToken
         chat = body.get("telegramChatId") or runtime.telegramChatId
         return await send_test_ping(token, chat)
+    if target == "metaapi":
+        from app.services.metaapi import validate_metaapi
+
+        return await validate_metaapi(
+            body.get("metaapiToken") or "",
+            body.get("metaapiAccountId") or "",
+        )
     return {"ok": False, "detail": "Unknown target"}
+
+
+@router.get("/mt5/status")
+async def mt5_status() -> dict:
+    from app.services.metaapi import get_status
+
+    return await get_status()
 
 
 @router.post("/agent/chat")

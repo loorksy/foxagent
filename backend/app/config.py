@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     telegram_chat_id: str = ""
     enable_telegram_notifications: bool = False
 
+    metaapi_token: str = ""
+    metaapi_account_id: str = ""
+
     # Single-operator auth. Prefer ADMIN_PASSWORD_HASH (bcrypt). APP_PASSWORD is
     # accepted only as a bootstrap secret and is never written to the database.
     app_password: str = ""
