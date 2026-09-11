@@ -40,7 +40,10 @@ type ChatState = {
   abort: AbortController | null;
   runUsage: TokenUsage | null;
   sessionUsage: TokenUsage | null;
+  queuedText: string | null;
   setModel: (model: string) => void;
+  queueMessage: (text: string) => void;
+  clearQueue: () => void;
   setHighlight: (highlight: string | null) => void;
   setArtifactsOpen: (open: boolean) => void;
   setArtifactsWidth: (width: number) => void;
@@ -106,9 +109,10 @@ function asMessages(raw: unknown): ChatMessage[] {
         strategyExperiment: row.strategyExperiment,
         usage: row.usage,
         images: Array.isArray(row.images) ? row.images : undefined,
+        steps: Array.isArray(row.steps) ? row.steps : undefined,
       } satisfies ChatMessage;
     })
-    .filter((m) => m.text || m.recommendationId || m.strategyProposal || m.strategyExperiment || (m.images && m.images.length));
+    .filter((m) => m.text || m.recommendationId || m.strategyProposal || m.strategyExperiment || (m.images && m.images.length) || (m.steps && m.steps.length));
 }
 
 export const useChat = create<ChatState>((set) => ({
@@ -132,7 +136,10 @@ export const useChat = create<ChatState>((set) => ({
   abort: null,
   runUsage: null,
   sessionUsage: null,
+  queuedText: null,
   setModel: (model) => set({ model }),
+  queueMessage: (text) => set({ queuedText: text.trim() || null }),
+  clearQueue: () => set({ queuedText: null }),
   setHighlight: (highlight) => set({ highlight }),
   setArtifactsOpen: (artifactsOpen) => set({ artifactsOpen }),
   setArtifactsWidth: (artifactsWidth) => set({ artifactsWidth: Math.min(720, Math.max(280, artifactsWidth)) }),
@@ -330,16 +337,19 @@ export const useChat = create<ChatState>((set) => ({
       return { runUsage: usage, messages: msgs };
     }),
   complete: () =>
-    set((s) => ({
-      streaming: false,
-      runEndedAt: s.streaming ? Date.now() : s.runEndedAt,
-      sessionUsage: s.streaming ? addUsage(s.sessionUsage, s.runUsage) : s.sessionUsage,
-      messages: s.messages.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
-      tools: s.tools.map((t) => (t.output == null ? { ...t, output: { ok: true } } : t)),
-      steps: s.steps.map((st) =>
+    set((s) => {
+      const steps = s.steps.map((st) =>
         st.kind === "tool" && st.toolOutput == null ? { ...st, toolOutput: { ok: true } } : st
-      ),
-    })),
+      );
+      return {
+        streaming: false,
+        runEndedAt: s.streaming ? Date.now() : s.runEndedAt,
+        sessionUsage: s.streaming ? addUsage(s.sessionUsage, s.runUsage) : s.sessionUsage,
+        steps,
+        tools: s.tools.map((t) => (t.output == null ? { ...t, output: { ok: true } } : t)),
+        messages: s.messages.map((m) => (m.streaming ? { ...m, streaming: false, steps } : m)),
+      };
+    }),
   hydrateFromSession: (session) => {
     const state = session.state || {};
     const messages = asMessages(state.messages);
@@ -375,8 +385,12 @@ export const useChat = create<ChatState>((set) => ({
         at: 0,
       })),
     ];
+    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+    const hydrated = lastAssistant && !lastAssistant.steps?.length && steps.length
+      ? messages.map((m) => (m.id === lastAssistant.id ? { ...m, steps } : m))
+      : messages;
     set({
-      messages,
+      messages: hydrated,
       thoughts: state.thoughts || [],
       tools: state.tools || [],
       debate: state.debate || [],
@@ -410,6 +424,7 @@ export const useChat = create<ChatState>((set) => ({
       runId: null,
       runUsage: null,
       sessionUsage: null,
+      queuedText: null,
       activeArtifactId: null,
     }),
 }));

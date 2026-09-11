@@ -172,6 +172,21 @@ export type ChatImage = {
   caption?: string;
 };
 
+export type RunStep = {
+  kind: "thought" | "tool" | "debate" | "recall" | "intent";
+  agent?: string;
+  text?: string;
+  channel?: string;
+  toolId?: string;
+  toolName?: string;
+  toolLabel?: string;
+  toolInput?: unknown;
+  toolOutput?: unknown;
+  role?: string;
+  intent?: string;
+  at: number;
+};
+
 export type ChatMessage = {
   id: string;
   role: ChatRole;
@@ -184,6 +199,7 @@ export type ChatMessage = {
   strategyExperiment?: StrategyExperimentJob;
   usage?: TokenUsage;
   images?: ChatImage[];
+  steps?: RunStep[];
 };
 
 export type StructureFvg = {
@@ -224,21 +240,6 @@ export type RunThought = {
   agent: string;
   text: string;
   channel?: string;
-};
-
-export type RunStep = {
-  kind: "thought" | "tool" | "debate" | "recall" | "intent";
-  agent?: string;
-  text?: string;
-  channel?: string;
-  toolId?: string;
-  toolName?: string;
-  toolLabel?: string;
-  toolInput?: unknown;
-  toolOutput?: unknown;
-  role?: string;
-  intent?: string;
-  at: number;
 };
 
 export type RunTool = {
