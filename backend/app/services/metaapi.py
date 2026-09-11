@@ -181,8 +181,8 @@ async def place_market_order(
 ) -> dict:
     """Execute a market order via the MetaApi client API.
 
-    NOT wired into any agent/bot flow yet — reserved for the future
-    execution bot.
+    Called exclusively by execute_signal_order (execution-type bot
+    instances), after MT5 connectivity and pause checks pass.
     """
     token, account_id = await _resolve_credentials()
     if not token or not account_id:

@@ -177,7 +177,7 @@ export const en: Record<MessageKey, string> = {
   "calendar.impact": "Impact",
   "calendar.gold": "Gold bias",
   "bot.title": "Gold sniper bot",
-  "bot.subtitle": "Algorithmic XAU_USD signals only. No broker execution.",
+  "bot.subtitle": "Algorithmic XAU_USD signals only. Orders fire solely through an MT5-linked execution bot.",
   "bot.start": "Start bot",
   "bot.stop": "Stop bot",
   "bot.running": "Running",

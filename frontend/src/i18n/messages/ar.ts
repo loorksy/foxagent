@@ -175,7 +175,7 @@ export const ar = {
   "calendar.impact": "التأثير",
   "calendar.gold": "أثر الذهب",
   "bot.title": "قناص صفقات الذهب",
-  "bot.subtitle": "إشارات خوارزمية على XAU_USD فقط. لا تنفيذ أوامر.",
+  "bot.subtitle": "إشارات خوارزمية على XAU_USD فقط. التنفيذ حصراً عبر بوت تنفيذ مرتبط بحساب MT5.",
   "bot.start": "تشغيل البوت",
   "bot.stop": "إيقاف البوت",
   "bot.running": "نشط",
