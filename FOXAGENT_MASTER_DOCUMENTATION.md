@@ -1,10 +1,10 @@
 # FoxAgent — المرجع التقني والتشغيلي الشامل
 
-وثيقة مرجعية مستخرجة من شيفرة المستودع كما هي على `main` عند الدمج `b15a9ec` (PR #12). لا تعتمد على تخمين أو قوالب. كل ثابت ومسار واستدعاء مذكور هنا موجود في الملفات المشار إليها.
+وثيقة مرجعية مستخرجة من شيفرة المستودع كما هي على `main` عند الدمج `ca065eb` (PR #15). لا تعتمد على تخمين أو قوالب. كل ثابت ومسار واستدعاء مذكور هنا موجود في الملفات المشار إليها.
 
-**ما هو FoxAgent؟** محطة عمل لمشغّل واحد، ذهب فقط (`XAU_USD`)، تحليل ICT/SMC عبر طاقم Claude، بوت إشارات لا يضع أوامر وسيط، مستودع شموع محلي، وبوابة مخاطر حتمية في بايثون. الواجهة عربية RTL افتراضياً. التشغيل الحي: `https://foxagent.lork.cloud`.
+**ما هو FoxAgent؟** محطة عمل لمشغّل واحد، ذهب فقط (`XAU_USD` في المستودع/المسح، `XAUUSD` في MetaApi)، تحليل ICT/SMC عبر طاقم Claude مع موجّه نوايا، أسطول بوتات (strategy / quant / alerts / execution)، مستودع شموع محلي، وبوابة مخاطر حتمية في بايثون. الواجهة عربية RTL افتراضياً. التشغيل الحي: `https://foxagent.lork.cloud`.
 
-**ما الذي لا يفعله النظام؟** لا يرسل أوامر شراء/بيع إلى OANDA. البوت يكتب إشارات في SQLite وينتظر اعتماد المشغّل. لا يوجد `eval` ولا تنفيذ بايثون حر من النموذج. لا تُختلق أخبار ولا شموع عند فشل المصدر.
+**ما الذي لا يفعله النظام؟** لا يستدعي واجهة أوامر OANDA. مسار الوسيط الوحيد هو `metaapi.place_market_order` لبوت من نوع `execution` بعد Pause وMT5 متصل وبوابة المخاطر. لا `eval`/`exec` داخل عملية الخادم — كود الاستراتيجيات يعمل في subprocess `python -I` مع قائمة builtins مغلقة. لا تُختلق أخبار ولا شموع عند فشل المصدر.
 
 ---
 
@@ -57,8 +57,9 @@ klinecharts  EventBus (ذاكرة + Redis اختياري)
    - `_reflection_loop()` — انتظار **8 ثوانٍ** ثم دورة كل **45 ثانية**
    - `gold_sync_loop()` — انتظار **4 ثوانٍ** ثم دورة كل **60 ثانية**
    - `_ops_loop()` — انتظار **20 ثانية** ثم دورة كل **60 ثانية**
-6. إن `FOXAGENT_BOT_AUTOSTART` ليست `0/false/off/no` **و** `runtime.botEnabled` **و** النظام غير متوقف: `bot.start()`.
-7. عند الإغلاق: `await bot.stop()` ثم `cancel()` لأربع المهام **دون انتظارها** (`await` غير موجود بعد الإلغاء).
+6. `get_manager().ensure_default()` يزرع `bot-gold-default` إن لم يُزرع (`SEED_KEY=bot_instances_seeded`).
+7. إن `FOXAGENT_BOT_AUTOSTART` ليست `0/false/off/no` **و** النظام غير متوقف: `bot.start()` إن `runtime.botEnabled`، ثم `manager.start_enabled()` لبقية النسخ المفعّلة.
+8. عند الإغلاق: `await bot.stop()` ثم `await manager.stop_all()` ثم `cancel()` لأربع المهام **دون انتظارها** (`await` غير موجود بعد الإلغاء).
 
 إن فشل فتح SQLite يسقط `init_db` إلى مخازن قواميس في الذاكرة (`_memory_recs`, `_memory_settings`) وتستمر العملية بلا قرص.
 
@@ -93,7 +94,7 @@ klinecharts  EventBus (ذاكرة + Redis اختياري)
 - إن فشل فك التشفير يُجرَّب JSON صريح (ترحيل قديم).
 - `GET /api/settings` يعيد `SettingsPublic` بأقنعة (`anthropicApiKeySet` إلخ) لا الأسرار.
 
-الحقول الحسّاسة في `SettingsPayload` (`backend/app/schemas.py`): `anthropicApiKey`, `oandaApiToken`, `oandaAccountId`, `oandaEnvironment`, `telegramBotToken`, `telegramChatId`, حدود المخاطر، إعدادات البوت، ومزوّد التقويم.
+الحقول الحسّاسة في `SettingsPayload` (`backend/app/schemas.py`): `anthropicApiKey`, `oandaApiToken`, `oandaAccountId`, `oandaEnvironment`, `telegramBotToken`, `telegramChatId`, `metaapiToken`, `metaapiAccountId`, حدود المخاطر، إعدادات البوت، ومزوّد التقويم. `SettingsPublic` يعيد `metaapiTokenSet` و`metaapiConfigured` (= التوكن والحساب معاً) بلا الأسرار.
 
 ### 1.4 حلقات الخلفية ومسؤولية كل حلقة
 
@@ -103,7 +104,8 @@ klinecharts  EventBus (ذاكرة + Redis اختياري)
 | `gold_sync_loop` | `backend/app/services/gold_sync.py` | انتظار 4 ثوانٍ ثم كل **60 ثانية**. تُعطَّل إن `GOLD_WAREHOUSE_SYNC` في `{0,false,off,no}` أو وُجد `PYTEST_CURRENT_TEST`. | `run_sync_cycle`: لكل إطار في `M15,H1,H4,D` يملأ الفجوات ثم `prune_older_than` لنافذة 730 يوماً. دفعات 5000 شمعة، تأخير 0.4 ثانية، تراجع أسي حتى 6 محاولات عند 429. | تتخطى الدورة وتنام 60 ثانية. |
 | `_reflection_loop` | `backend/app/main.py` | انتظار 8 ثوانٍ ثم كل **45 ثانية**. | `scan_closed_recommendations()` يكتب درساً للتوصيات ذات الحالة النهائية. | تتخطى المسح. |
 | `_ops_loop` | `backend/app/main.py` | انتظار 20 ثانية ثم كل **60 ثانية**. | إن الساعة UTC = 7 والدقيقة < 20: `send_briefing()`. ثم تنبيه مستودع راكد وتنبيه أخبار عالية الأثر خلال 30 دقيقة. | تتخطى كل الإرسال. |
-| `TradingBotCoordinator._monitor_loop` | `backend/app/services/trading_bot/coordinator.py` | `max(5, botScanInterval)` ثانية، الافتراضي **60**. عند خطأ: نوم **30 ثانية** و`note_scan_error()`. | دورة مسح الوكلاء الثلاثة ثم `record_scan`. | `on_pause_changed(True)` يوقف المراقبة بالكامل. داخل الدورة `_accept` يعيد `None`. |
+| `TradingBotCoordinator._monitor_loop` | `backend/app/services/trading_bot/coordinator.py` | `max(5, botScanInterval)` ثانية للبوت الافتراضي. عند خطأ: نوم **30 ثانية** و`note_scan_error()`. | دورة مسح الوكلاء ثم `record_scan`. إن `instance.type==execution` و`autoExecute`: `execute_signal_order(trigger="auto")` بعد القبول. | `on_pause_changed(True)` يوقف المراقبة. `_accept` يعيد `None`. |
+| `BotRunner._loop` | `backend/app/services/trading_bot/instances.py` | `max(5, scanIntervalSeconds)` لكل نسخة غير افتراضية. | منسّق مستقل مربوط بـ `BotInstance`. | Pause أو `!enabled` → نوم فقط. `BotManager.on_pause_changed(True)` يستدعي `stop_all()`. |
 | تجارب المختبر | `backend/app/services/trading_bot/experiment.py` | متزامن داخل طلب HTTP/أداة MCP، حتى **8** محاولات. | يقترح مسودة ثم يُشغّل الباك تست ويُحوّر الأعلام. | `start_experiment` يعيد فوراً `{paused: true}`؛ أثناء الحلقة يضع الحالة `paused` ويكسر. |
 
 `price_pump` **لا** يشارك في مزامنة المستودع. المستودع حلقة مستقلة.
@@ -143,8 +145,9 @@ flowchart LR
 | `pattern_memory` | `trading_bot.models.PatternMemoryRow` | إحصاء أنماط |
 | `bot_signals` | `trading_bot.models.BotSignalRow` | إشارات البوت |
 | `strategy_performance` | `trading_bot.models.StrategyPerformanceRow` | أداء الوكلاء |
-| `strategies` | `trading_bot.models.StrategyRecord` | عقود DSL (غير المضمّنة تُحفظ هنا) |
+| `strategies` | `trading_bot.models.StrategyRecord` | عقود DSL أو Python (`kind` داخل JSON) |
 | `backtest_reports` | `backtest.models` | تقارير الباك تست |
+| `bot_instances` | `trading_bot.models.BotInstanceRow` | أسطول البوتات: `id`, `name`, `type`, `enabled`, `payload` JSON |
 
 مخازن **داخل العملية فقط** (تُفقد عند إعادة التشغيل): `_SCANS` (حد 400)، `_JOBS` تجارب المختبر، `_ENTRIES` دفتر القرار، عدّاد `_errors` للقواطع، `_RATE`/`_SENT` تهدئة تيليجرام، `_alerted_ids` تنبيهات الصفقات، كاش التقويم `_cache`.
 
@@ -154,37 +157,34 @@ flowchart LR
 
 ### 2.1 مسار الاستدعاء الدقيق (`run_crew` في `backend/app/services/crew.py`)
 
-لا توجد تسميات مراحل معلّبة في الواجهة. كل فكرة وأداة ومناظرة تُبث لحظة حدوثها عبر SSE (`POST /api/agent/chat/stream`).
+لا توجد تسميات مراحل معلّبة في فقاعة الرد. التفكير الداخلي والمناظرة يظهران في `ChatReasoning` فقط؛ الفقاعة تستقبل ما وُسم `final: true` (`frontend/src/lib/agentSend.ts`).
 
-الترتيب الحتمي داخل `_run_crew_body`:
+بعد Pause/إلغاء والذاكرة وآخر 8 رسائل، `classify_intent` (`backend/app/services/intent.py`) يبث `agent_intent`. النوايا: `chat` | `analysis` | `recommendation` | `strategy`. التصنيف: regex حتمي ثم Claude بـ `CLASSIFIER_MAX_TOKENS=8` ثم احتياط.
 
 ```
 raise_if_paused + raise_if_cancelled
         │
         ▼
-get_past_context(symbol, query=message)  → حدث agent_memory_recall
+get_past_context → agent_memory_recall
         │
         ▼
-آخر 8 رسائل من agent_sessions.state.messages
+classify_intent → agent_intent
         │
-        ▼
-إن لم تكن الرسالة سؤالاً سريعاً (is_quick_question):
-    capture_chart_screenshot(symbol, gran, 180) إجباراً
-    أحداث agent_tool_call / agent_tool_result بمعرّف vision-forced
-        │
-        ▼
-1) TechnicalAgent     run_agent_turn + صورة PNG
-2) FundamentalAgent   run_agent_turn (النص التقني حتى 4000 حرف)
-3) مناظرة Bull / Bear  _run_debate — بلا أدوات
-4) RiskManagerAgent   run_agent_turn
-        │
-        ▼
-إن وُجد TradeRecommendation:
-    persist_recommendation → enforce_risk_gate → save_recommendation
-    store_decision (kind=risk, status=pending)
-    أحداث agent_recommendation + recommendation
-وإلا: AgentUnavailable
+        ├─ chat        → FoxAgent + CHAT_SYSTEM، final_voice=True، بلا مناظرة
+        ├─ strategy    → StrategyAgent + STRATEGY_SYSTEM، final_voice=True، بلا مناظرة
+        ├─ analysis    → Technical (+ لقطة إن لم يكن سؤالاً سريعاً)
+        │                Fundamental فقط إن wants_macro(message)
+        │                ثم ANALYSIS_SUMMARY_SYSTEM، بلا مناظرة
+        └─ recommendation (المسار الثقيل)
+              Technical (+ لقطة إجبارية)
+              Fundamental إجباري
+              مناظرة Bull/Bear (_run_debate، بلا أدوات)
+              RiskManagerAgent
+              persist_recommendation → enforce_risk_gate
+              rec.analysis = {technical, fundamental, bull, bear, risk}
 ```
+
+الطاقم **لا** يستدعي MetaApi. التوصية تُحفظ فقط.
 
 حدود المناظرة (`DebateBudget` في `run_control.py`):
 
@@ -203,7 +203,9 @@ get_past_context(symbol, query=message)  → حدث agent_memory_recall
 | FundamentalAgent | `FUNDAMENTAL_SYSTEM` | `get_economic_calendar`, `get_market_sentiment`, `fetch_financial_news`, `query_macro_memory` | موجز كلّي. إن كانت `events[]` فارغة يجب التصريح بذلك. بلا توصية. |
 | BullResearcher | `BULL_SYSTEM` | لا أدوات | 4–8 جمل مع الثور. |
 | BearResearcher | `BEAR_SYSTEM` | لا أدوات | 4–8 جمل ضد الثور. |
-| RiskManagerAgent | `RISK_SYSTEM` = `SYSTEM_PROMPT` + حكم نهائي | يُطلب منه `validate_risk_rules` ثم `send_recommendation` عند الموافقة | إما JSON `TradeRecommendation` مطابق للعقد، أو رفض صريح. |
+| RiskManagerAgent | `RISK_SYSTEM` = `SYSTEM_PROMPT` + حكم نهائي | يُطلب منه `validate_risk_rules` ثم `send_recommendation` عند الموافقة | إما JSON `TradeRecommendation` مطابق للعقد، أو رفض صريح. يُستدعى في مسار `recommendation` فقط. |
+| FoxAgent (chat) | `CHAT_SYSTEM` | أدوات خفيفة حسب السؤال | رد نهائي مباشر. |
+| StrategyAgent | `STRATEGY_SYSTEM` | `list_strategies`, `propose_strategy`, `validate_strategy`, `experiment_strategy` | مسودة/شرح مختبر. لا توصية سوق. |
 
 `SYSTEM_PROMPT` في `backend/app/services/agent.py` يفرض مساراً متعدد الأطر (D/H4 ثم H1/M15 ثم M5/M1)، عقد JSON واحد بلا سياج markdown، حد R:R أدنى 1:2، وتفضيل أوامر LIMIT عند توازن FVG/OB. يُلحق به `ARTIFACT_PROTOCOL` لوثائق `<antArtifact>`.
 
@@ -241,7 +243,7 @@ get_past_context(symbol, query=message)  → حدث agent_memory_recall
 | `get_market_sentiment` | `instrument` اختياري | شموع H1×120 + سعر حي | bias, lastBos, liquiditySweep, mid, spread, session |
 | `fetch_financial_news` | `instrument` اختياري | RSS رويترز `feeds.reuters.com/reuters/businessNews` حتى 8 عناوين | `{ok, items}` أو `{ok:false, items:[], detail}` |
 | `draw_on_chart` | `overlays` | يبث `agent_chart_overlays` مع `additive: true` | `{ok, overlays, additive}` |
-| `propose_strategy` | `name` إلزامي وبقية عقد الاستراتيجية | `StrategyLibrary.propose(..., source=claude_proposed)` | مسودة `status=draft`, `pinned=false` |
+| `propose_strategy` | `name` إلزامي؛ `kind` ∈ {`dsl`,`python`} و`code` إن Python | `StrategyLibrary.propose(..., source=claude_proposed)` — `lint_code` إن `kind=python` | مسودة `status=draft`, `pinned=false` |
 | `validate_strategy` | `strategy_id` | `validate(..., days=730, auto_activate=False)` | `{ok, passed, reasons, strategy, report}` — لا تثبيت |
 | `experiment_strategy` | حقول المسودة + `days` | حتى 8 باك تست؛ لا تثبيت | `{ok, job, strategy}` |
 | `list_strategies` | `status` افتراضي `active` | المكتبة كاملة ثم تصفية الحالة؛ `all` يلغي التصفية | `{strategies: [...]}` |
@@ -343,7 +345,8 @@ actualRr, impliedRiskPercent, minRiskReward, maxRiskPercent, session, sessionAll
 |---|---|
 | `persist_recommendation` (أداة `send_recommendation` + نهاية الطاقم) | نعم دائماً |
 | اعتماد إشارة الوارد `approve_signal` → `promote_signal` → `persist_recommendation` | نعم |
-| قبول إشارة البوت `_accept` | نعم ثم `_bot_limits` التي **تضيّق فقط** (`botMinRr`, `botMaxRiskPercent`, `botAllowedSessions`) |
+| قبول إشارة البوت `_accept` | نعم ثم `_bot_limits` التي **تضيّق فقط** (`botMinRr` / حدود النسخة) |
+| `execute_signal_order` → `place_market_order` | **لا** داخل عميل MetaApi. الشرط السابق: Pause + MT5 متصل + نوع execution + إشارة اجتازت `_accept` |
 | `POST /api/bot/signals/{id}/to-recommendation` | يشترط `confidence ≥ 0.8` **ثم** `promote_signal` (البوابة). الوارد **لا** يشترط 0.8 |
 | `PATCH /api/recommendations/{id}` → `update_recommendation` | **لا**. يدمج الحقول ويحفظ بلا بوابة |
 | تعديل إشارة بعد الاعتماد | لا يعيد تشغيل البوابة |
@@ -498,7 +501,23 @@ delete()                 → المسودات فقط
 2. `multi_strategy` — `MultiStrategyAgent.scan_xau_usd()` على الاستراتيجيات النشطة
 3. `pattern_notes` — `PatternNotesAgent.detect_patterns()`
 
-كل إشارة تمر `_accept`: Pause / Safe Mode / `is_halted(strategyId)` → بوابة المخاطر → `_bot_limits` → `save_signal` → `schedule_bot_signal`. ثم `record_scan` حتى لو صُفر القبول.
+كل إشارة تمر `_accept`: Pause / Safe Mode / `is_halted(strategyId)` → بوابة المخاطر → `_bot_limits` → `save_signal` → `schedule_bot_signal`. إن كانت النسخة `execution` و`autoExecute`: `execute_signal_order(trigger="auto")`. ثم `record_scan` حتى لو صُفر القبول.
+
+استراتيجيات `kind=python` تُمسَح عبر `run_code_on_window` في `multi_strategy_agent.py` (آخر نافذة فقط) وتُختبر عبر `run_code_backtest` في المحرك.
+
+### 4.3.1 أسطول البوتات وMetaApi
+
+`BOT_TYPES = strategy | quant | alerts | execution`. البوت الافتراضي `DEFAULT_BOT_ID=bot-gold-default`. التنفيذ يستخدم الرمز `MT5_GOLD_SYMBOL=XAUUSD`.
+
+| النوع | المسار بعد `_accept` |
+|---|---|
+| `strategy` / `quant` | إشارة → وارد الاعتمادات. quant يختلف في المعالج (اختيار استراتيجيات) لا في الخادم. |
+| `alerts` | `metadata.mode="alert"` — `inbox.py` يتخطاها |
+| `execution` | كـ strategy + `execute_signal_order` عند الاعتماد أو `autoExecute` |
+
+إنشاء/تفعيل `execution` يستدعي `assert_execution_allowed()` → `metaapi.is_connected()` وإلا `ExecutionNotAllowed`.
+
+`place_market_order`: `ORDER_TYPE_BUY|SELL`، حجم `orderVolume` (أدنى 0.01)، تعليق `FoxAgent {id}` مقصوص 26 حرفاً، مهلة HTTP 10ث، كاش المنطقة 300ث. Fail-closed: يعيد `{error}` ولا يرمي إلى المسارات.
 
 القواطع (`backend/app/services/trading_bot/circuit.py`):
 
@@ -538,7 +557,7 @@ Next.js 14 مجموعة `(desk)` ملفوفة بـ `AuthGate` + `DeskLayout`. `/
 | `/login` | كلمة المشغّل → كوكي JWT | — |
 | `/agents`, `/agents/[sessionId]` | الدردشة + الرسم + الآثار | `useChat`, `useSessions`, `useWorkspace` |
 | `/inbox`, `/inbox/[id]` | الوارد / الاعتمادات / التنبيهات | `useInbox` |
-| `/bots` | مكتب البوت (وكلاء، إشارات، preflight) | `useBot` |
+| `/bots` | أسطول البوتات + معالج الإنشاء + preflight | `useBot`, `useBotInstances` |
 | `/bots/structure`, `/bots/patterns`, `/bots/news` | صفحات فرعية للوكلاء | `useBot` |
 | `/scans`, `/scans/[id]` | دورات المسح | — (جلب REST) |
 | `/briefing` | إحاطة ما قبل لندن | — |
@@ -550,21 +569,26 @@ Next.js 14 مجموعة `(desk)` ملفوفة بـ `AuthGate` + `DeskLayout`. `/
 | `/calendar` | التقويم الاقتصادي | `useCalendar` |
 | `/settings` | الأسرار والحدود واللغة | `useSettings`, `useLocale` |
 
-متاجر إضافية: `useUi` (الشريط الجانبي)، `useCatalog` (النماذج)، `useWorkspace` (الرمز والإطار والسعر والأوامر الرسومية).
+متاجر إضافية: `useUi` (الشريط الجانبي)، `useCatalog` (النماذج)، `useWorkspace` (الرمز والإطار والسعر والأوامر الرسومية)، `useBotInstances` (الأسطول).
 
 اللغة الافتراضية `DEFAULT_LOCALE = "ar"` اتجاه `rtl`، مفتاح التخزين `foxagent_locale`. `applyDocumentLocale` يضبط `dir` و`lang` على `document`.
 
-الشريط في `Sidebar.tsx` يعرض عدّاد الوارد المفتوح إن `counts.open > 0` (يظهر `9+` فوق 9).
+الشريط في `Sidebar.tsx` مجموعات `NAV_GROUPS`: دردشة بلا عنوان؛ `navGroup.trading` (توصيات/وارد/دفتر)؛ `navGroup.automation` (`/bots`, `/scans`)؛ `navGroup.lab`؛ `navGroup.market`؛ ثم الإعدادات. عدّاد الوارد إن `counts.open > 0` (يظهر `9+` فوق 9).
+
+`/bots` يعرض شبكة `BotInstanceCard` ومعالج `BotCreateWizard`. نوع `execution` يُعطَّل في الواجهة إن `GET /api/mt5/status` يعيد `connected=false`. الإعدادات تتضمن قسم MT5 (`metaapiToken` / `metaapiAccountId`) وتحقق `target: "metaapi"`.
+
+الدردشة: جلسة كسولة (لا تُنشأ حتى أول رسالة). `ChatReasoning` أكورديون للنوايا والذاكرة والمناظرة والأدوات. `AgentCursor` يحرّك مؤشراً مرئياً عند `agent_chart_overlays` (`CURSOR_MOVE_MS=350`, `BETWEEN_OVERLAYS_MS=480`).
 
 قاعدة انتقاء Zustand: لا تُستخدم `|| []` / `|| {}` داخل المحدِّدات (تفادي React #185). المخازن تُعرِّف ثوابت فارغة مستقرة مثل `EMPTY_COUNTS`.
 
-### 5.2 مسار اعتماد التوصية من الوارد إلى التنفيذ اليدوي
+### 5.2 مسار الاعتماد من الوارد إلى التنفيذ
 
 ```
-بوت / طاقم
-   │
-   ├─ إشارة bot_signals status∈{pending,staged}  → تبويب approvals
-   └─ توصية recommendations status∈{PENDING,pending} بلا تسمية → تبويب inbox
+بوت (strategy/quant)     بوت alerts          بوت execution              طاقم Claude
+   │                        │                     │                         │
+   ▼                        ▼                     ▼                         ▼
+إشارة pending            mode=alert          إشارة + بوابة              توصية PENDING
+→ تبويب approvals        لا تدخل الوارد      → approvals أو autoExecute  → تبويب inbox
                     │
                     ▼
 GET /api/inbox  → InboxList
@@ -578,21 +602,22 @@ POST /approvals/{id}/approve
 promote_signal → persist_recommendation (بوابة المخاطر)
          │
          ▼
-signal.status = active + recommendationId
-recommendation.status = PENDING تُعرض في /recommendations
+إن inst.type == execution:
+    execute_signal_order(trigger="approval")
+    → Pause؟ تخطَّ  /  MT5 غير متصل؟ تخطَّ
+    → metaapi.place_market_order(XAUUSD, BUY|SELL, orderVolume, SL, TP1)
+وإلا: المشغّل ينفّذ يدوياً خارج FoxAgent
          │
          ▼
-المشغّل ينفّذ يدوياً لدى الوسيط
-ثم PATCH الحالة (HIT_TP* / STOPPED_OUT / …)
-ثم اختياري: POST-mortem عبر /recommendations/{id}/postmortem
-         │
-         ▼
+PATCH الحالة (HIT_TP* / STOPPED_OUT / …) ثم postmortem اختياري
 حلقة الانعكاس تكتب الدرس في memory_entries
 ```
 
+`autoExecute` لا يُقبل إلا إذا `type == "execution"`. عند التفعيل يُستدعى `execute_signal_order(trigger="auto")` من `_accept` بعد البوابة. إشارة نُفِّذت بنجاح تُعلَّم `status=executed` ولا تُعاد (`metadata.order` بلا `error`).
+
 `ApprovalCard` يعرض الدخول والوقف وR والثقة. الرفض بلا نص يفشل في الخادم (`Rejection reason is required`). التنبيهات (مستودع راكد، خبر ≤30 دقيقة، خطأ بوت) تُغلق بـ ack ويُحفظ المعرّف في KV `inbox_acks`.
 
-**التنفيذ اليدوي:** لا يوجد زر «أرسل إلى OANDA». النظام يتوقف عند التوصية/الإشارة المعتمدة. التنفيذ خارج FoxAgent.
+**OANDA:** لا يوجد زر أو مسار «أرسل إلى OANDA». **MT5:** مسار وحيد عبر MetaApi لبوت `execution` كما أعلاه. طاقم الدردشة لا يضع أوامر.
 
 الترويج عبر REST `/bot/signals/{id}/to-recommendation` يشترط ثقة ≥ 0.8. مسار الوارد لا يشترط ذلك، لكنه يمر بالبوابة نفسها.
 
@@ -641,9 +666,9 @@ recommendation.status = PENDING تُعرض في /recommendations
 
 1. يضع `_paused_memory = True`.
 2. يكتب KV `system_paused = "1"`.
-3. يستدعي `coordinator.on_pause_changed(True)` الذي **يوقف** حلقة البوت (`is_running=False` ويلغي `_monitor_loop`).
+3. يستدعي `coordinator.on_pause_changed(True)` الذي **يوقف** حلقة البوت الافتراضي، و`BotManager.on_pause_changed(True)` يستدعي `stop_all()`.
 
-`POST /api/system/resume` يعكس القيمة ويستأنف البوت فقط إن `botEnabled`.
+`POST /api/system/resume` يعكس القيمة، يستأنف البوت الافتراضي إن `botEnabled`، ثم `manager.start_enabled()`.
 
 ما يتوقف فوراً أو في أول فحص تالٍ:
 
@@ -655,6 +680,8 @@ recommendation.status = PENDING تُعرض في /recommendations
 | `_reflection_loop` | تتخطى الكتابة |
 | `_ops_loop` | لا إحاطة ولا تنبيهات |
 | قبول إشارات البوت | `_accept` يعيد `None` |
+| `execute_signal_order` | يعيد `None` ويكتب في السجل `system paused` — لا طلب MetaApi |
+| حلقات `BotRunner` غير الافتراضية | `stop_all()` |
 | `validate` / `start_experiment` | `{paused: true}` |
 | Preflight | الفحص `pause` يصبح حاجزاً |
 
@@ -840,9 +867,25 @@ await asyncio.gather(pump, reflector, warehouse, ops, return_exceptions=True)
 
 **تصحيح:** ميزانية زمنية شاملة (مثلاً 180 ثانية) تُلغي `run_id`؛ اجعل الأسئلة السريعة تتخطى المناظرة كما تتخطى اللقطة.
 
-### 7.18 البوت لا يتداول لدى الوسيط — وهذا مقصود
+### 7.18 مسار التنفيذ عبر MetaApi — بوابات ناقصة داخل العميل
 
-لا ثغرة تنفيذ صامت. أي طلب «تفعيل تنفيذ آلي» يحتاج عقداً جديداً وبوابة مخاطر على الحجم الحقيقي ومسار Pause على طبقة الأوامر. لا يوجد ذلك في المستودع الحالي.
+`place_market_order` نفسه لا يفحص Pause ولا بوابة المخاطر ولا نوع البوت. الاعتماد على `execute_signal_order` فقط. استدعاء مباشر للعميل يتجاوز الحوكمة.
+
+**تصحيح:** ارفع `SystemPaused` / ارفض غير `XAUUSD` داخل `place_market_order`، أو اجعل الدالة خاصة بوحدة `instances`.
+
+`autoExecute` يضع أمر سوق فور قبول الإشارة دون اعتماد وارد. الحجم `orderVolume` لا يمر عبر `implied_risk_percent` كمخاطرة حساب.
+
+**تصحيح:** احسب `|entry−SL| × volume / equity` ضد `maxRiskPercent` قبل `place_market_order`. اجعل الإعداد الافتراضي `autoExecute=false` (وهو كذلك) وأظهر تحذيراً في المعالج.
+
+نصوص الواجهة (`bots.subtitle` / `never places broker orders`) ما زالت تنفي التنفيذ بينما نوع `execution` ينفّذ.
+
+**تصحيح:** فرّق في النسخة العربية/الإنجليزية بين بوت الإشارة وبوت التنفيذ.
+
+### 7.19 استراتيجيات Python في subprocess
+
+`code_runner.py`: `MAX_CODE_CHARS=20000`، CPU 10ث، ذاكرة 512MB، جدار 20ث، `python -I`. `lint_code` يفحص AST ووجود `on_bar` بلا تنفيذ. الخادم لا يستدعي `eval`. الخطر المتبقي: تسريب موارد إن فشل قتل العملية، واستراتيجيات `kind=python` في المسح الحي عبر `run_code_on_window`.
+
+**تصحيح:** راقب عدد العمليات الفرعية؛ ارفض التشغيل الحي إن Pause أو Safe Mode (المنسّق يفعل ذلك في `_accept` بعد تولّد الإشارة).
 
 ---
 
@@ -868,17 +911,25 @@ await asyncio.gather(pump, reflector, warehouse, ops, return_exceptions=True)
 | POST | `/lab/experiments` | حتى 8 محاولات في الذاكرة |
 | POST | `/telegram/commands` | أوامر القائمة البيضاء |
 | GET | `/warehouse/gaps` | فجوات المستودع |
+| GET | `/mt5/status` | `metaapi.get_status()` — fail-closed |
+| POST | `/settings/validate` | `target=metaapi` يستدعي `validate_metaapi` |
+| GET/POST | `/bots/instances` | قائمة/إنشاء؛ `execution` يتطلب MT5 متصل |
+| PATCH/DELETE | `/bots/instances/{id}` | تعديل/حذف؛ تفعيل execution يعيد فحص MT5 |
+| POST | `/bots/instances/{id}/start` `/stop` | حلقة `BotRunner` |
+| GET | `/bots/instances/{id}/signals` | إشارات النسخة |
+| POST | `/strategies/lint-code` | `lint_code` — AST فقط |
+| GET | `/agent/images/{shot_id}` | لقطات `chart_shots` |
 
 ## ملحق ب — قواعد مقدّسة مستخرجة من السلوك لا من التعليقات التسويقية
 
 1. `enforce_risk_gate` في بايثون قبل أي حفظ توصية عبر `persist_recommendation`.
-2. Pause يوقف الطاقم وضخ السعر ومزامنة المستودع والإحاطات وحلقة البوت.
-3. البوت لا يستدعي واجهة أوامر OANDA.
-4. لا تنفيذ بايثون حر من النموذج؛ الأدوات مغلقة في `dispatch_tool`.
+2. Pause يوقف الطاقم وضخ السعر ومزامنة المستودع والإحاطات وكل حلقات البوت و`execute_signal_order`.
+3. لا أوامر OANDA. مسار الوسيط الوحيد: `metaapi.place_market_order` من `execute_signal_order` لبوت `execution` على `XAUUSD`.
+4. لا `eval`/`exec` في عملية الخادم؛ أدوات MCP مغلقة في `dispatch_tool`؛ كود المختبر في subprocess معزول.
 5. الأخبار والشموع الفارغة تبقى فارغة.
-6. التثبيت البشري فقط — `auto_activate` يُتجاهل.
+6. تثبيت الاستراتيجية بشري فقط — `auto_activate` يُتجاهل. `autoExecute` مسار منفصل لبوت التنفيذ فقط.
 7. الواجهة عربية RTL أولاً.
-8. الذهب وحده في المستودع والمختبر والبوت؛ أزواج المحاكي الأخرى للرسم الحي فقط.
+8. الذهب وحده في المستودع والمختبر والمسح (`XAU_USD`) والتنفيذ (`XAUUSD`).
 
 ## ملحق ج — خريطة الملفات المصدر
 
@@ -895,7 +946,11 @@ await asyncio.gather(pump, reflector, warehouse, ops, return_exceptions=True)
 | Pause | `backend/app/services/run_control.py` |
 | المستودع والمزامنة | `backend/app/services/gold_warehouse.py`, `gold_sync.py` |
 | OANDA | `backend/app/services/oanda.py` |
-| البوت | `backend/app/services/trading_bot/coordinator.py` |
+| البوت الافتراضي | `backend/app/services/trading_bot/coordinator.py` |
+| أسطول النسخ | `backend/app/services/trading_bot/instances.py` |
+| استراتيجيات Python | `backend/app/services/trading_bot/code_runner.py` |
+| MetaApi / MT5 | `backend/app/services/metaapi.py` |
+| موجّه النوايا | `backend/app/services/intent.py` |
 | DSL والمكتبة | `strategy_schema.py`, `strategy_library.py`, `experiment.py` |
 | الوارد | `backend/app/services/inbox.py` |
 | تيليجرام | `telegram_service.py`, `telegram_ops.py` |
