@@ -20,7 +20,6 @@ import { useT } from "@/i18n";
 export function ChatPanel() {
   const messages = useChat((s) => s.messages);
   const streaming = useChat((s) => s.streaming);
-  const steps = useChat((s) => s.steps);
   const highlight = useChat((s) => s.highlight);
   const runUsage = useChat((s) => s.runUsage);
   const recs = useRecommendations((s) => s.items);
@@ -55,8 +54,6 @@ export function ChatPanel() {
       panel.style.removeProperty("--composer-height");
     };
   }, [isHero]);
-
-  const showInspector = streaming || steps.length > 0;
 
   return (
     <div className="flex h-full min-w-0 flex-1">
@@ -107,8 +104,10 @@ export function ChatPanel() {
                     >
                       <AgentAvatar thinking={Boolean(m.streaming)} />
                       <div className="min-w-0 flex-1">
-                        {m.streaming || (showInspector && m.id === messages.filter((x) => x.role === "assistant").at(-1)?.id) ? (
-                          <ChatReasoning />
+                        {m.streaming ? (
+                          <ChatReasoning live />
+                        ) : m.steps?.length ? (
+                          <ChatReasoning steps={m.steps} live={false} />
                         ) : null}
                         {m.images?.length ? (
                           <div className="mt-2 space-y-2">
