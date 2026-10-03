@@ -10,7 +10,7 @@ Autonomous ICT / Smart Money trading workstation: **Claude Agent SDK** + **OANDA
 
 **دليل باك تست الذهب:** [docs/BACKTEST_GUIDE.md](docs/BACKTEST_GUIDE.md)
 
-The agent talks to Anthropic only. There is no local / algorithmic stand-in that fabricates a Claude setup. `ANTHROPIC_API_KEY` must be a real key that can create messages. Without it (or if Anthropic rejects the account), the chat returns the provider error.
+The default agent talks to Anthropic. There is no local stand-in that fabricates a Claude or Z.ai setup. `ANTHROPIC_API_KEY` must be a real key that can create messages. A second provider, Z.ai, is available when the operator picks a GLM model and `ZAI_API_KEY` is set (environment or the encrypted settings store). Without the key for the chosen provider, the chat returns that provider's error.
 
 Single-operator login is required. Set `APP_PASSWORD` (or a bcrypt `ADMIN_PASSWORD_HASH`) and `JWT_SECRET`. The UI sends an httpOnly cookie after `POST /api/auth/login`. Every `/api/*` route and `/ws/market` require that token.
 
@@ -20,7 +20,7 @@ Single-operator login is required. Set `APP_PASSWORD` (or a bcrypt `ADMIN_PASSWO
 | --- | --- |
 | Frontend | Next.js 14 App Router, Tailwind, Zustand, klinecharts 9.8 |
 | Backend | FastAPI, SQLAlchemy (SQLite / Postgres), optional Redis pub/sub |
-| Agent | Claude Agent SDK MCP tools → Anthropic Messages tool-use (same key, no fake fallback) |
+| Agent | Claude Agent SDK MCP tools → Anthropic Messages, or Z.ai `ZaiClient` when a GLM model is selected |
 | Market | OANDA REST candle + tick **polling** (about 0.85s) when credentials are set; deterministic simulator otherwise. `stream_prices` / `oanda_stream_base` exist in code but are **not wired** — REST poll is the live path. |
 | Vision | Matplotlib chart snapshots passed into Claude Vision / tool results |
 

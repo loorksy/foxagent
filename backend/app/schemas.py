@@ -186,6 +186,7 @@ class SessionUpdate(BaseModel):
 
 class SettingsPayload(BaseModel):
     anthropicApiKey: str = ""
+    zaiApiKey: str = ""
     oandaApiToken: str = ""
     oandaAccountId: str = ""
     oandaEnvironment: Literal["practice", "live"] = "practice"
@@ -219,6 +220,7 @@ class SettingsPayload(BaseModel):
 
 class SettingsPublic(BaseModel):
     anthropicApiKeySet: bool = False
+    zaiApiKeySet: bool = False
     oandaApiTokenSet: bool = False
     oandaAccountId: str = ""
     oandaEnvironment: str = "practice"

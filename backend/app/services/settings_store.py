@@ -91,6 +91,7 @@ async def load_runtime_settings() -> SettingsPayload:
                 stored = SettingsPayload()
     return SettingsPayload(
         anthropicApiKey=stored.anthropicApiKey or env.anthropic_api_key,
+        zaiApiKey=stored.zaiApiKey or env.zai_api_key,
         oandaApiToken=stored.oandaApiToken or env.oanda_api_token,
         oandaAccountId=stored.oandaAccountId or env.oanda_account_id,
         oandaEnvironment=stored.oandaEnvironment or env.oanda_environment,  # type: ignore[arg-type]
@@ -128,6 +129,7 @@ def apply_runtime_to_env(payload: SettingsPayload) -> None:
     """Push runtime secrets into the cached Settings object used by connectors."""
     env = get_settings()
     env.anthropic_api_key = payload.anthropicApiKey
+    env.zai_api_key = payload.zaiApiKey
     env.oanda_api_token = payload.oandaApiToken
     env.oanda_account_id = payload.oandaAccountId
     env.oanda_environment = payload.oandaEnvironment
@@ -146,6 +148,8 @@ async def save_runtime_settings(payload: SettingsPayload) -> SettingsPublic:
     current = await load_runtime_settings()
     if not payload.anthropicApiKey:
         payload.anthropicApiKey = current.anthropicApiKey
+    if not payload.zaiApiKey:
+        payload.zaiApiKey = current.zaiApiKey
     if not payload.oandaApiToken:
         payload.oandaApiToken = current.oandaApiToken
     if not payload.telegramBotToken:
@@ -164,6 +168,7 @@ def to_public(payload: SettingsPayload) -> SettingsPublic:
     env = get_settings()
     return SettingsPublic(
         anthropicApiKeySet=bool(payload.anthropicApiKey),
+        zaiApiKeySet=bool(payload.zaiApiKey),
         oandaApiTokenSet=bool(payload.oandaApiToken),
         oandaAccountId=payload.oandaAccountId,
         oandaEnvironment=payload.oandaEnvironment,

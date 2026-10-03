@@ -3,21 +3,28 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useWorkspace } from "@/stores/workspace";
-import type { MemoryEntry } from "@/lib/types";
+import type { LongTermMemory, MemoryEntry } from "@/lib/types";
 import { useT } from "@/i18n";
 
 export function MemoryPage() {
   const symbol = useWorkspace((s) => s.symbol);
   const t = useT();
   const [entries, setEntries] = useState<MemoryEntry[]>([]);
+  const [longTerm, setLongTerm] = useState<LongTermMemory[]>([]);
   const [context, setContext] = useState("");
 
   useEffect(() => {
     void api
-      .memory()
-      .then((data) => setEntries(data.entries || []))
-      .catch(() => setEntries([]));
-  }, []);
+      .memory(symbol)
+      .then((data) => {
+        setEntries(data.entries || []);
+        setLongTerm(data.longTerm || []);
+      })
+      .catch(() => {
+        setEntries([]);
+        setLongTerm([]);
+      });
+  }, [symbol]);
 
   useEffect(() => {
     void api
@@ -36,6 +43,26 @@ export function MemoryPage() {
         <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
           {context.trim() ? context : t("memory.noContext")}
         </p>
+      </section>
+
+      <section className="mt-6 space-y-3">
+        <h2 className="text-sm font-semibold">{t("memory.longTerm")}</h2>
+        {longTerm.length === 0 ? (
+          <p className="rounded-xl border border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground">
+            {t("memory.longTermEmpty")}
+          </p>
+        ) : (
+          longTerm.map((row) => (
+            <article key={row.id} className="rounded-xl border border-border bg-card px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+                <span>{row.layer}</span>
+                <span>{row.kind}</span>
+                <span>{row.symbol}</span>
+              </div>
+              <p className="mt-1.5 whitespace-pre-wrap text-sm">{row.text}</p>
+            </article>
+          ))
+        )}
       </section>
 
       <div className="mt-6 space-y-3">

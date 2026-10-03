@@ -19,6 +19,7 @@ services:
       ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
       JWT_SECRET: ${JWT_SECRET:-}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-720}
+      ZAI_API_KEY: ${ZAI_API_KEY:-}
     volumes:
       - foxagent_data:/data
     networks:

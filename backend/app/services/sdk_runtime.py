@@ -37,6 +37,8 @@ SDK_TOOLS = [
     "mcp__oanda__validate_strategy",
     "mcp__oanda__list_strategies",
     "mcp__oanda__experiment_strategy",
+    "mcp__oanda__memory_recall",
+    "mcp__oanda__memory_capture",
 ]
 
 

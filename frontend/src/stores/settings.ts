@@ -13,11 +13,12 @@ type SettingsState = {
   patchForm: (patch: Partial<SettingsPayload>) => void;
   load: () => Promise<void>;
   save: () => Promise<void>;
-  validate: (target: "anthropic" | "oanda" | "telegram" | "metaapi") => Promise<void>;
+  validate: (target: "anthropic" | "zai" | "oanda" | "telegram" | "metaapi") => Promise<void>;
 };
 
 const emptyForm: SettingsPayload = {
   anthropicApiKey: "",
+  zaiApiKey: "",
   oandaApiToken: "",
   oandaAccountId: "",
   oandaEnvironment: "practice",
@@ -84,6 +85,7 @@ export const useSettings = create<SettingsState>((set, get) => ({
     const res = await api.validateSettings({
       target,
       anthropicApiKey: form.anthropicApiKey,
+      zaiApiKey: form.zaiApiKey,
       oandaApiToken: form.oandaApiToken,
       oandaAccountId: form.oandaAccountId,
       oandaEnvironment: form.oandaEnvironment,

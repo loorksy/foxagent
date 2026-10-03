@@ -137,6 +137,7 @@ CHAT_SYSTEM = (
     "analysis. You are ONE assistant backed by an internal desk team (technical analyst, macro analyst, "
     "risk manager) — never present the internal roles as separate personas; always speak as FoxAgent. "
     "Always reply in the language the user wrote in (Arabic in → Arabic out). "
+    "Use memory_recall for lessons that survive sessions, and memory_capture for one durable preference or constraint. "
     "Be concise and conversational: 1–6 short sentences, no markdown headers, no emoji walls, no "
     "checklists, no tables unless asked. "
     "You may call tools to answer factual market questions (price, candles, calendar, news). "
@@ -785,43 +786,13 @@ async def _run_crew_body(
     )
     raise_if_cancelled(run_id)
 
-    if intent == INTENT_CHAT:
-        chat_user = f"{hist}\n\nUser message:\n{req.message}" if hist else req.message
-        text, _ = await run_agent_turn(
-            name="FoxAgent",
-            system=CHAT_SYSTEM,
-            user=chat_user,
-            emit=emit,
-            run_id=run_id,
-            api_key=api_key,
-            model=model,
-            session_id=session_id,
-            user_message=req.message,
-            final_voice=True,
-        )
-        return None, text
-
-    if intent == INTENT_STRATEGY:
-        strat_user = (
-            f"Instrument: {req.symbol}\nTimeframe: {req.timeframe}\n"
-            f"{hist}\n\nTrader request:\n{req.message}"
-        )
-        text, _ = await run_agent_turn(
-            name="StrategyAgent",
-            system=STRATEGY_SYSTEM,
-            user=strat_user,
-            emit=emit,
-            run_id=run_id,
-            api_key=api_key,
-            model=model,
-            session_id=session_id,
-            user_message=req.message,
-            final_voice=True,
-        )
-        return None, text
-
+    memory_block = ""
     try:
-        memory_block = await get_past_context(req.symbol, query=req.message)
+        from app.services.long_term_memory import recall_for_prompt
+
+        journal = await get_past_context(req.symbol, query=req.message)
+        layered = await recall_for_prompt(req.symbol, req.message, session_id=session_id)
+        memory_block = "\n\n".join(part for part in (journal, layered) if part)
     except Exception as exc:
         logger.warning("memory recall failed: %s", exc)
         memory_block = ""
@@ -840,6 +811,41 @@ async def _run_crew_body(
     memory_prefix = (
         f"Recalled lessons (do not repeat these failure modes):\n{memory_block}\n\n" if memory_block else ""
     )
+
+    if intent == INTENT_CHAT:
+        chat_user = f"{memory_prefix}{hist}\n\nUser message:\n{req.message}" if hist else f"{memory_prefix}{req.message}"
+        text, _ = await run_agent_turn(
+            name="FoxAgent",
+            system=CHAT_SYSTEM,
+            user=chat_user,
+            emit=emit,
+            run_id=run_id,
+            api_key=api_key,
+            model=model,
+            session_id=session_id,
+            user_message=req.message,
+            final_voice=True,
+        )
+        return None, text
+
+    if intent == INTENT_STRATEGY:
+        strat_user = (
+            f"Instrument: {req.symbol}\nTimeframe: {req.timeframe}\n"
+            f"{memory_prefix}{hist}\n\nTrader request:\n{req.message}"
+        )
+        text, _ = await run_agent_turn(
+            name="StrategyAgent",
+            system=STRATEGY_SYSTEM,
+            user=strat_user,
+            emit=emit,
+            run_id=run_id,
+            api_key=api_key,
+            model=model,
+            session_id=session_id,
+            user_message=req.message,
+            final_voice=True,
+        )
+        return None, text
 
     raise_if_cancelled(run_id)
     chart_b64: str | None = None

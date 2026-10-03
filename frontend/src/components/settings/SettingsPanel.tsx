@@ -173,6 +173,20 @@ export function SettingsPanel() {
         </section>
 
         <section className="space-y-3 rounded-xl border border-border bg-card p-4">
+          <h2 className="text-sm font-semibold">{t("settings.zai")}</h2>
+          <Field
+            label="ZAI_API_KEY"
+            secret
+            value={form.zaiApiKey || ""}
+            onChange={(zaiApiKey) => patchForm({ zaiApiKey })}
+            placeholder={pub?.zaiApiKeySet ? t("settings.secretPlaceholder") : "zai-..."}
+          />
+          <button type="button" onClick={() => void validate("zai")} className="text-[12px] text-info hover:underline">
+            {t("settings.verifyZai")}
+          </button>
+        </section>
+
+        <section className="space-y-3 rounded-xl border border-border bg-card p-4">
           <h2 className="text-sm font-semibold">{t("settings.oanda")}</h2>
           <Field
             label="OANDA_API_TOKEN"

@@ -148,7 +148,7 @@ export function ChatComposer({ hero = false }: { hero?: boolean }) {
             >
               {models.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.label}
+                  {m.badge ? `${m.label} · ${m.badge}` : m.label}
                 </option>
               ))}
             </select>
