@@ -7,24 +7,12 @@ from typing import Any, Callable, Awaitable
 
 from app.schemas import ChatRequest, TradeRecommendation, new_id
 from app.services.artifacts import ARTIFACT_PROTOCOL
+from app.services.model_catalog import is_zai_model, resolve_model
 from app.services.settings_store import resolve_anthropic_key
 
 logger = logging.getLogger(__name__)
 
 Emit = Callable[[str, dict[str, Any]], Awaitable[None]]
-
-MODEL_ALIASES = {
-    "sonnet": "claude-sonnet-4-5",
-    "sonnet-4": "claude-sonnet-4-5",
-    "claude 3.7 sonnet": "claude-3-7-sonnet-latest",
-    "claude-3.7-sonnet": "claude-3-7-sonnet-latest",
-    "3.7": "claude-3-7-sonnet-latest",
-    "claude 3.5 sonnet": "claude-3-5-sonnet-latest",
-    "claude-3.5-sonnet": "claude-3-5-sonnet-latest",
-    "haiku": "claude-3-5-haiku-latest",
-    "claude 3.5 haiku": "claude-3-5-haiku-latest",
-    "opus": "claude-opus-4-5",
-}
 
 SYSTEM_PROMPT = """You are FoxAgent, an elite ICT / Smart Money Concepts trading analyst working a live OANDA desk.
 
@@ -76,6 +64,8 @@ Strategy Lab (XAU_USD only — never invent other pairs):
 - propose_strategy saves a draft. Explain the idea, then wait for the operator before validate_strategy unless they explicitly ask to backtest it.
 - validate_strategy runs the warehouse backtest (~2 years). Pause blocks validation. A strategy becomes live only after it clears the thresholds.
 - Do not edit or delete builtin strategies.
+
+Long-term memory survives restarts. memory_recall reads L3/L2/L1 (and a matching L0 source). memory_capture stores one preference, constraint, or scenario — not the whole chat.
 """ + ARTIFACT_PROTOCOL
 
 
@@ -83,11 +73,6 @@ class AgentUnavailable(Exception):
     def __init__(self, detail: str) -> None:
         self.detail = detail
         super().__init__(detail)
-
-
-def resolve_model(name: str) -> str:
-    key = name.strip().lower()
-    return MODEL_ALIASES.get(key, name.strip() or "claude-sonnet-4-5")
 
 
 def extract_json_object(text: str) -> dict[str, Any] | None:
@@ -151,16 +136,38 @@ async def run_chat(req: ChatRequest, emit: Emit) -> dict[str, Any]:
         await emit("run_complete", payload)
         return usage
 
+    engine = "multi-agent-crew"
     try:
         from app.services.run_control import RunCancelled, SystemPaused, clear_cancel, raise_if_paused
+        from app.services.settings_store import load_runtime_settings
 
         await raise_if_paused()
-        api_key = await resolve_anthropic_key()
-        if not api_key:
-            raise AgentUnavailable(
-                "ANTHROPIC_API_KEY is missing. Save a real key in Settings — FoxAgent will not invent a setup."
+        runtime = await load_runtime_settings()
+        model_name = resolve_model(req.model or runtime.defaultClaudeModel)
+        if is_zai_model(model_name):
+            from app.services.zai_chat import run_zai_chat
+            from app.services.zai_runtime import resolve_zai_key
+
+            engine = "zai"
+            zai_key = await resolve_zai_key()
+            if not zai_key:
+                raise AgentUnavailable(
+                    "ZAI_API_KEY is missing. Save a real key in Settings — FoxAgent will not invent a Z.ai setup."
+                )
+            rec, final_text = await run_zai_chat(
+                req.model_copy(update={"model": model_name}),
+                emit,
+                run_id,
+                zai_key,
+                session_id,
             )
-        rec, final_text = await run_crew(req, emit, run_id, api_key, session_id)
+        else:
+            api_key = await resolve_anthropic_key()
+            if not api_key:
+                raise AgentUnavailable(
+                    "ANTHROPIC_API_KEY is missing. Save a real key in Settings — FoxAgent will not invent a setup."
+                )
+            rec, final_text = await run_crew(req, emit, run_id, api_key, session_id)
     except SystemPaused as exc:
         detail = str(exc)
         await emit("error", {"runId": run_id, "sessionId": session_id, "detail": detail, "paused": True})
@@ -213,18 +220,30 @@ async def run_chat(req: ChatRequest, emit: Emit) -> dict[str, Any]:
             {"role": "assistant", "text": final_text.strip(), "runId": run_id, "usage": tracker.public()},
         )
 
+    try:
+        from app.services.long_term_memory import record_turn
+
+        await record_turn(
+            session_id=session_id,
+            symbol=req.symbol,
+            user_text=req.message,
+            assistant_text=(rec.rationale if rec else final_text) or "",
+        )
+    except Exception:
+        logger.warning("long-term memory write failed")
+
     usage = await complete(
         {
             "runId": run_id,
             "sessionId": session_id,
-            "engine": "multi-agent-crew",
+            "engine": engine,
             "recommendationId": rec.id if rec else None,
         }
     )
     return {
         "runId": run_id,
         "sessionId": session_id,
-        "engine": "multi-agent-crew",
+        "engine": engine,
         "recommendation": rec.model_dump(mode="json") if rec else None,
         "usage": usage,
     }

@@ -222,6 +222,17 @@ export type StructureScan = {
   fvgs?: StructureFvg[];
 };
 
+export type LongTermMemory = {
+  id: string;
+  layer: string;
+  kind: string;
+  symbol: string;
+  text: string;
+  parentId?: string;
+  sessionId?: string;
+  createdAt?: string | null;
+};
+
 export type MemoryEntry = {
   id: string;
   symbol: string;
@@ -307,10 +318,12 @@ export type ModelOption = {
   id: string;
   label: string;
   badge?: string;
+  provider?: "anthropic" | "zai";
 };
 
 export type SettingsPublic = {
   anthropicApiKeySet: boolean;
+  zaiApiKeySet?: boolean;
   oandaApiTokenSet: boolean;
   oandaAccountId: string;
   oandaEnvironment: string;
@@ -341,6 +354,7 @@ export type SettingsPublic = {
 
 export type SettingsPayload = {
   anthropicApiKey: string;
+  zaiApiKey?: string;
   oandaApiToken: string;
   oandaAccountId: string;
   oandaEnvironment: "practice" | "live";

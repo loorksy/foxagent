@@ -55,6 +55,7 @@ async def health() -> dict:
         "anthropicKeyValid": bool(probe.get("keyValid")),
         "anthropicReady": bool(probe.get("ok")),
         "anthropicDetail": probe.get("detail") or "",
+        "zaiConfigured": bool(runtime.zaiApiKey),
         **sdk_stats.snapshot(),
         "goldWarehouse": await _gold_warehouse_health(),
     }
@@ -195,12 +196,21 @@ async def sessions_delete(session_id: str) -> dict:
 
 @router.get("/memory")
 async def memory_list(symbol: str | None = None) -> dict:
-    return {"entries": await list_entries(symbol=symbol, include_pending=True)}
+    from app.services.long_term_memory import list_long_term
+
+    return {
+        "entries": await list_entries(symbol=symbol, include_pending=True),
+        "longTerm": await list_long_term(symbol),
+    }
 
 
 @router.get("/memory/context")
 async def memory_context(symbol: str = "XAU_USD", query: str = "") -> dict:
-    text = await get_past_context(symbol, query=query)
+    from app.services.long_term_memory import recall_for_prompt
+
+    journal = await get_past_context(symbol, query=query)
+    layered = await recall_for_prompt(symbol, query)
+    text = "\n\n".join(part for part in (journal, layered) if part)
     return {"symbol": symbol, "context": text}
 
 
@@ -221,6 +231,10 @@ async def settings_validate(body: dict) -> dict:
     target = body.get("target")
     if target == "anthropic":
         return await validate_anthropic_key(body.get("anthropicApiKey") or "")
+    if target == "zai":
+        from app.services.zai_runtime import probe_zai
+
+        return await probe_zai(body.get("zaiApiKey") or "", model=str(body.get("model") or ""))
     if target == "oanda":
         return await validate_oanda(
             body.get("oandaApiToken") or "",
@@ -952,12 +966,6 @@ async def rec_postmortem(rec_id: str, body: dict = Body(...)) -> dict:
 
 @router.get("/models")
 async def models() -> dict:
-    return {
-        "models": [
-            {"id": "claude-sonnet-4-5", "label": "Claude Sonnet 4.5", "badge": "Default"},
-            {"id": "claude-3-7-sonnet-latest", "label": "Claude 3.7 Sonnet", "badge": "Vision"},
-            {"id": "claude-3-5-sonnet-latest", "label": "Claude 3.5 Sonnet", "badge": "Stable"},
-            {"id": "claude-3-5-haiku-latest", "label": "Claude 3.5 Haiku", "badge": "Fast"},
-            {"id": "claude-opus-4-5", "label": "Claude Opus 4.5", "badge": "Max"},
-        ]
-    }
+    from app.services.model_catalog import list_models
+
+    return {"models": list_models()}

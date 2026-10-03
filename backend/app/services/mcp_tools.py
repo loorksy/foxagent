@@ -8,6 +8,7 @@ from app.services.analysis import analyze_structure, calculate_ict_levels, struc
 from app.services.chart_capture import render_candles_b64
 from app.services.chart_shots import save_chart_shot
 from app.services.macro_feed import fetch_financial_news, get_economic_calendar, get_market_sentiment
+from app.services.long_term_memory import capture_memory, drill_down, recall_for_prompt, search_memory
 from app.services.memory_log import get_past_context
 from app.services.oanda import oanda
 from app.db import save_recommendation
@@ -122,6 +123,41 @@ async def tool_calculate_ict_levels(instrument: str, granularity: str, count: in
 async def tool_query_technical_memory(instrument: str, query: str = "") -> dict[str, Any]:
     text = await get_past_context(instrument, query=query or f"{instrument} ICT FVG order block")
     return {"kind": "technical", "instrument": instrument, "context": text}
+
+
+async def tool_memory_recall(
+    query: str = "",
+    instrument: str = "XAU_USD",
+    memory_id: str = "",
+) -> dict[str, Any]:
+    if memory_id:
+        chain = await drill_down(memory_id)
+        if not chain:
+            return {"ok": False, "error": "memory id not found", "memoryId": memory_id}
+        return {"ok": True, "chain": chain}
+    hits = await search_memory(query or instrument, symbol=instrument or "XAU_USD", limit=6)
+    prompt = await recall_for_prompt(instrument or "XAU_USD", query)
+    return {"ok": True, "hits": hits, "prompt": prompt}
+
+
+async def tool_memory_capture(
+    text: str,
+    layer: str = "L1",
+    kind: str = "atom",
+    instrument: str = "XAU_USD",
+) -> dict[str, Any]:
+    if layer == "L0":
+        layer = "L1"
+    try:
+        saved = await capture_memory(
+            text=text,
+            layer=layer,
+            kind=kind,
+            symbol=instrument or "XAU_USD",
+        )
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+    return {"ok": True, "memory": saved}
 
 
 async def tool_query_macro_memory(instrument: str, query: str = "") -> dict[str, Any]:
@@ -482,6 +518,35 @@ def mcp_tool_specs() -> list[dict[str, Any]]:
             },
         },
         {
+            "name": "memory_recall",
+            "description": "Search durable desk memory (L3 persona, L2 scenario, L1 atoms, matching L0) or open one row and its source chain by id.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "instrument": {"type": "string"},
+                    "memory_id": {"type": "string", "description": "Open this row and the parent chain under it"},
+                },
+            },
+        },
+        {
+            "name": "memory_capture",
+            "description": "Store one durable memory the operator should not have to repeat: preference, constraint, or scenario. Do not store the whole chat.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "layer": {"type": "string", "enum": ["L1", "L2", "L3"]},
+                    "kind": {
+                        "type": "string",
+                        "enum": ["atom", "scenario", "persona", "preference", "constraint"],
+                    },
+                    "instrument": {"type": "string"},
+                },
+                "required": ["text"],
+            },
+        },
+        {
             "name": "record_post_trade_reflection",
             "description": "Write a lesson-learned against a closed recommendation (TP / SL / expire).",
             "input_schema": {
@@ -574,6 +639,19 @@ async def dispatch_tool(
         out = await tool_list_strategies(str(args.get("status") or "active"))
     elif name == "experiment_strategy":
         out = await tool_experiment_strategy(args, emit)
+    elif name == "memory_recall":
+        out = await tool_memory_recall(
+            str(args.get("query") or ""),
+            str(args.get("instrument") or "XAU_USD"),
+            str(args.get("memory_id") or args.get("memoryId") or ""),
+        )
+    elif name == "memory_capture":
+        out = await tool_memory_capture(
+            str(args.get("text") or ""),
+            str(args.get("layer") or "L1"),
+            str(args.get("kind") or "atom"),
+            str(args.get("instrument") or "XAU_USD"),
+        )
     else:
         raise ValueError(f"Unknown tool: {name}")
     await emit_tool_result(name, out, emit=emit, tool_id=tool_id, agent=agent)
@@ -714,6 +792,22 @@ def try_build_sdk_server():
         return await _sdk_payload("list_strategies", args)
 
     @tool(
+        "memory_recall",
+        "Search durable desk memory or open one row by id.",
+        {"query": str, "instrument": str, "memory_id": str},
+    )
+    async def memory_recall(args: dict[str, Any]) -> dict[str, Any]:
+        return await _sdk_payload("memory_recall", args)
+
+    @tool(
+        "memory_capture",
+        "Store one durable preference, constraint, or scenario.",
+        {"text": str, "layer": str, "kind": str, "instrument": str},
+    )
+    async def memory_capture(args: dict[str, Any]) -> dict[str, Any]:
+        return await _sdk_payload("memory_capture", args)
+
+    @tool(
         "experiment_strategy",
         "Draft a gold strategy and run up to 8 warehouse backtests. Never pins.",
         {
@@ -756,5 +850,7 @@ def try_build_sdk_server():
             validate_strategy,
             list_strategies,
             experiment_strategy,
+            memory_recall,
+            memory_capture,
         ],
     )

@@ -2,6 +2,7 @@ import type {
   AgentSession,
   Instrument,
   KLineBar,
+  LongTermMemory,
   MemoryEntry,
   ModelOption,
   SettingsPayload,
@@ -60,7 +61,9 @@ export const api = {
   structure: (instrument: string, granularity: string, count = 300) =>
     http<StructureScan>(`/api/structure?instrument=${instrument}&granularity=${granularity}&count=${count}`),
   memory: (symbol?: string) =>
-    http<{ entries: MemoryEntry[] }>(`/api/memory${symbol ? `?symbol=${encodeURIComponent(symbol)}` : ""}`),
+    http<{ entries: MemoryEntry[]; longTerm?: LongTermMemory[] }>(
+      `/api/memory${symbol ? `?symbol=${encodeURIComponent(symbol)}` : ""}`
+    ),
   memoryContext: (symbol: string, query = "") =>
     http<{ symbol: string; context: string }>(
       `/api/memory/context?symbol=${encodeURIComponent(symbol)}&query=${encodeURIComponent(query)}`

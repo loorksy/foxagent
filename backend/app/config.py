@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     settings_secret: str = ""
 
     anthropic_api_key: str = ""
+    zai_api_key: str = ""
     oanda_api_token: str = ""
     oanda_account_id: str = ""
     oanda_environment: str = "practice"

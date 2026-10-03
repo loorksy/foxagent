@@ -22,11 +22,15 @@ export const DEFAULT_INSTRUMENTS: Instrument[] = [
 ];
 
 export const MODELS: ModelOption[] = [
-  { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", badge: "Default" },
-  { id: "claude-3-7-sonnet-latest", label: "Claude 3.7 Sonnet", badge: "Vision" },
-  { id: "claude-3-5-sonnet-latest", label: "Claude 3.5 Sonnet", badge: "Stable" },
-  { id: "claude-3-5-haiku-latest", label: "Claude 3.5 Haiku", badge: "Fast" },
-  { id: "claude-opus-4-5", label: "Claude Opus 4.5", badge: "Max" },
+  { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", badge: "Default", provider: "anthropic" },
+  { id: "claude-3-7-sonnet-latest", label: "Claude 3.7 Sonnet", badge: "Vision", provider: "anthropic" },
+  { id: "claude-3-5-sonnet-latest", label: "Claude 3.5 Sonnet", badge: "Stable", provider: "anthropic" },
+  { id: "claude-3-5-haiku-latest", label: "Claude 3.5 Haiku", badge: "Fast", provider: "anthropic" },
+  { id: "claude-opus-4-5", label: "Claude Opus 4.5", badge: "Max", provider: "anthropic" },
+  { id: "glm-5.3", label: "GLM-5.3", badge: "Z.ai", provider: "zai" },
+  { id: "glm-5.2", label: "GLM-5.2", badge: "Z.ai", provider: "zai" },
+  { id: "glm-5.3-flash", label: "GLM-5.3 Flash", badge: "Z.ai", provider: "zai" },
+  { id: "glm-5.3-flashx", label: "GLM-5.3 FlashX", badge: "Z.ai", provider: "zai" },
 ];
 
 export const QUICK_PROMPTS = [

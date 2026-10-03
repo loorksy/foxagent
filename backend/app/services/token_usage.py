@@ -117,8 +117,10 @@ def parse_usage(raw: Any) -> TokenSlice:
                 _attr(nested, "ephemeral_1h_input_tokens")
             )
     return TokenSlice(
-        input_tokens=_as_int(_attr(usage, "input_tokens", "inputTokens", "uncached_input_tokens")),
-        output_tokens=_as_int(_attr(usage, "output_tokens", "outputTokens")),
+        input_tokens=_as_int(
+            _attr(usage, "input_tokens", "inputTokens", "prompt_tokens", "promptTokens", "uncached_input_tokens")
+        ),
+        output_tokens=_as_int(_attr(usage, "output_tokens", "outputTokens", "completion_tokens", "completionTokens")),
         cache_creation_input_tokens=_as_int(creation),
         cache_read_input_tokens=_as_int(_attr(usage, "cache_read_input_tokens", "cacheReadInputTokens")),
     )
